@@ -1,6 +1,13 @@
-@mVasu.Api_HostAddress = http://localhost:5282
+@mVasu.Api_HostAddress = https://localhost:7216
 
-GET {{mVasu.Api_HostAddress}}/weatherforecast/
+### Health check (anonyymi)
+GET {{mVasu.Api_HostAddress}}/api/health
+Accept: application/json
+
+###
+
+### OpenAPI document (development only)
+GET {{mVasu.Api_HostAddress}}/openapi/v1.json
 Accept: application/json
 
 ###
