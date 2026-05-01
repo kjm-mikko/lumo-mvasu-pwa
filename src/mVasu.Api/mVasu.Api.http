@@ -1,0 +1,6 @@
+@mVasu.Api_HostAddress = http://localhost:5282
+
+GET {{mVasu.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

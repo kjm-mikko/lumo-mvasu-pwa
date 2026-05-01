@@ -1,0 +1,70 @@
+{
+  "dotnet.defaultSolution": "Lumo.mVasu.slnx",
+  "dotnet.preferCSharpExtension": true,
+  "omnisharp.useModernNet": true,
+  "editor.formatOnSave": true,
+  "editor.tabSize": 4,
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "[csharp]": {
+    "editor.defaultFormatter": "ms-dotnettools.csharp",
+    "editor.tabSize": 4
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2
+  },
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2
+  },
+  "[scss]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2
+  },
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/node_modules": true,
+    "**/.angular": true
+  },
+  "search.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/.angular": true,
+    "**/coverage": true
+  },
+  "cSpell.words": [
+    "Lumo",
+    "mVasu",
+    "Kojamo",
+    "Kodit",
+    "DevExtreme",
+    "DevExpress",
+    "MSAL",
+    "Entra",
+    "EntraID",
+    "XPO",
+    "XAF",
+    "Scalar",
+    "PWA",
+    "PKCE",
+    "Serilog",
+    "Playfair",
+    "fontsource",
+    "vvoad",
+    "xVasu",
+    "Vasu"
+  ]
+}
