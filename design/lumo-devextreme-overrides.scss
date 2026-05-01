@@ -1,0 +1,303 @@
+// =============================================================================
+// Lumo DevExtreme Overrides
+// =============================================================================
+// Mappaa lumo-tokens.css :n CSS-muuttujat DevExtreme 25.2 Material-teeman päälle.
+//
+// Käyttö:
+//   src/styles.scss
+//   ----------------
+//   @import '@fontsource-variable/inter';
+//   @import '@fontsource-variable/playfair-display';
+//   @import 'devextreme/dist/css/dx.material.blue.light.css';
+//   @import 'assets/styles/lumo-tokens.css';
+//   @import 'assets/styles/lumo-devextreme-overrides.scss';
+//
+// HUOM: DevExtreme-luokkien nimet voivat muuttua versioiden välillä.
+// Validoi selectorit DevExtreme 25.2 -dokumentaatiota tai inspectoria
+// vasten ennen tuotantokäyttöä. Tämä tiedosto on aloituspiste, ei
+// kaikenkattava ratkaisu.
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// Global typography
+// -----------------------------------------------------------------------------
+.dx-widget,
+.dx-widget input,
+.dx-widget textarea,
+.dx-widget button {
+  font-family: var(--lumo-font-body);
+  font-feature-settings: var(--lumo-font-features);
+}
+
+
+// -----------------------------------------------------------------------------
+// Buttons — dx-button
+// -----------------------------------------------------------------------------
+// Primary CTA: type="default" + stylingMode="contained"
+.dx-button-mode-contained.dx-button-default {
+  background-color: var(--lumo-cta);
+  border-color: var(--lumo-cta);
+  color: var(--lumo-text-on-cta);
+  border-radius: var(--lumo-radius-md);
+
+  .dx-button-text {
+    font-weight: var(--lumo-fw-medium);
+    text-transform: none;          // DevExtreme defaults to uppercase — Lumo sentence case
+  }
+
+  &:hover {
+    background-color: var(--lumo-cta-hover);
+    border-color: var(--lumo-cta-hover);
+  }
+
+  &.dx-state-active {
+    background-color: var(--lumo-cta-active);
+  }
+
+  &.dx-state-focused {
+    box-shadow: 0 0 0 3px var(--lumo-focus-ring-cta);
+  }
+
+  &.dx-state-disabled {
+    opacity: 0.4;
+  }
+}
+
+// Secondary: type="default" + stylingMode="outlined"
+.dx-button-mode-outlined.dx-button-default {
+  background-color: transparent;
+  border: 1.5px solid var(--lumo-primary);
+  color: var(--lumo-primary);
+  border-radius: var(--lumo-radius-md);
+
+  .dx-button-text {
+    text-transform: none;
+    font-weight: var(--lumo-fw-medium);
+  }
+
+  &:hover {
+    background-color: var(--lumo-primary-subtle);
+  }
+
+  &.dx-state-focused {
+    box-shadow: 0 0 0 3px var(--lumo-focus-ring);
+  }
+
+  &.dx-state-disabled {
+    opacity: 0.4;
+  }
+}
+
+// Tertiary: type="default" + stylingMode="text"
+.dx-button-mode-text.dx-button-default {
+  color: var(--lumo-primary);
+
+  .dx-button-text {
+    text-transform: none;
+    font-weight: var(--lumo-fw-medium);
+  }
+
+  &:hover {
+    background-color: var(--lumo-primary-subtle);
+  }
+
+  &.dx-state-focused {
+    box-shadow: 0 0 0 3px var(--lumo-focus-ring);
+  }
+}
+
+// Size variants — apply via element class on the dx-button host
+.dx-button.btn-lg {
+  min-height: 48px;
+  .dx-button-content { padding: 13px 26px; }
+}
+.dx-button.btn-sm {
+  min-height: 32px;
+  .dx-button-content { padding: 6px 14px; font-size: var(--lumo-fs-small); }
+}
+
+
+// -----------------------------------------------------------------------------
+// Text inputs — dx-text-box, dx-number-box, dx-date-box, dx-select-box
+// -----------------------------------------------------------------------------
+.dx-texteditor.dx-editor-outlined {
+  border-radius: var(--lumo-radius-md);
+  border-color: var(--lumo-border-strong);
+  background: var(--lumo-bg);
+
+  .dx-texteditor-input {
+    color: var(--lumo-text-primary);
+    font-family: var(--lumo-font-body);
+    font-size: var(--lumo-fs-body);
+  }
+
+  .dx-placeholder {
+    color: var(--lumo-text-tertiary);
+  }
+
+  &.dx-state-hover:not(.dx-state-focused) {
+    border-color: var(--lumo-border-strong);
+  }
+
+  &.dx-state-focused {
+    border-color: var(--lumo-primary);
+    box-shadow: 0 0 0 3px var(--lumo-focus-ring);
+  }
+
+  &.dx-invalid {
+    border-color: var(--lumo-danger);
+
+    &.dx-state-focused {
+      box-shadow: 0 0 0 3px rgba(163, 45, 45, 0.20);
+    }
+  }
+
+  &.dx-state-disabled {
+    background: var(--lumo-surface);
+    color: var(--lumo-text-disabled);
+  }
+}
+
+
+// -----------------------------------------------------------------------------
+// Selection controls — radio, checkbox, switch
+// All use PRIMARY BLUE (state indicators), never CTA magenta (action color)
+// -----------------------------------------------------------------------------
+.dx-radiobutton.dx-state-selected .dx-radiobutton-icon::before {
+  background-color: var(--lumo-primary);
+}
+.dx-radiobutton.dx-state-focused .dx-radiobutton-icon {
+  box-shadow: 0 0 0 3px var(--lumo-focus-ring);
+}
+
+.dx-checkbox-checked .dx-checkbox-icon {
+  background-color: var(--lumo-primary);
+  border-color: var(--lumo-primary);
+  color: var(--lumo-text-on-primary);
+}
+.dx-checkbox.dx-state-focused .dx-checkbox-icon {
+  box-shadow: 0 0 0 3px var(--lumo-focus-ring);
+}
+
+.dx-switch-on-value .dx-switch-container {
+  background-color: var(--lumo-primary);
+}
+.dx-switch.dx-state-focused .dx-switch-container {
+  box-shadow: 0 0 0 3px var(--lumo-focus-ring);
+}
+
+
+// -----------------------------------------------------------------------------
+// Loading — dx-load-indicator, dx-progress-bar, dx-load-panel
+// -----------------------------------------------------------------------------
+.dx-loadindicator-icon .dx-loadindicator-segment {
+  background-color: var(--lumo-primary);
+}
+
+.dx-progressbar-range {
+  background-color: var(--lumo-primary);
+}
+.dx-progressbar.dx-progressbar-cta .dx-progressbar-range {
+  background-color: var(--lumo-cta);
+}
+
+
+// -----------------------------------------------------------------------------
+// Validation
+// -----------------------------------------------------------------------------
+.dx-invalid-message {
+  color: var(--lumo-danger);
+  font-size: var(--lumo-fs-small);
+}
+.dx-validationsummary-item {
+  color: var(--lumo-danger);
+}
+
+
+// -----------------------------------------------------------------------------
+// Forms — dx-form
+// -----------------------------------------------------------------------------
+.dx-form {
+  .dx-field-item-label-text {
+    color: var(--lumo-text-secondary);
+    font-size: var(--lumo-fs-small);
+    font-weight: var(--lumo-fw-medium);
+  }
+
+  .dx-field-item-help-text {
+    color: var(--lumo-text-tertiary);
+    font-size: var(--lumo-fs-small);
+    margin-top: 6px;
+  }
+}
+
+
+// -----------------------------------------------------------------------------
+// Toast — dx-toast (semantic alert variants)
+// DevExtreme's built-in types: info, warning, error, success
+// -----------------------------------------------------------------------------
+.dx-toast-success {
+  background-color: var(--lumo-success-subtle);
+  border: 1px solid var(--lumo-success);
+  color: var(--lumo-success);
+}
+.dx-toast-warning {
+  background-color: var(--lumo-warning-subtle);
+  border: 1px solid var(--lumo-warning);
+  color: var(--lumo-warning);
+}
+.dx-toast-error {
+  background-color: var(--lumo-danger-subtle);
+  border: 1px solid var(--lumo-danger);
+  color: var(--lumo-danger);
+}
+.dx-toast-info {
+  background-color: var(--lumo-info-subtle);
+  border: 1px solid var(--lumo-info);
+  color: var(--lumo-info);
+}
+
+// Dark mode: toast text uses primary text color for readability
+.theme-dark {
+  .dx-toast-success,
+  .dx-toast-warning,
+  .dx-toast-error,
+  .dx-toast-info {
+    color: var(--lumo-text-primary);
+  }
+}
+
+
+// -----------------------------------------------------------------------------
+// Lists, popups, scroll views — surfaces and borders
+// -----------------------------------------------------------------------------
+.dx-list,
+.dx-popup-content,
+.dx-overlay-content {
+  background-color: var(--lumo-surface-elevated);
+  color: var(--lumo-text-primary);
+  border-color: var(--lumo-border);
+}
+
+.dx-list-item.dx-state-hover {
+  background-color: var(--lumo-primary-subtle);
+}
+.dx-list-item.dx-state-focused {
+  background-color: var(--lumo-primary-subtle);
+}
+
+
+// -----------------------------------------------------------------------------
+// Mobile — touch target adjustments
+// -----------------------------------------------------------------------------
+@media (max-width: 600px) {
+  .dx-button-mode-contained.dx-button-default,
+  .dx-button-mode-outlined.dx-button-default {
+    min-height: 48px;       // Mobile default is 48px (Lumo touch target)
+  }
+
+  .dx-texteditor.dx-editor-outlined {
+    min-height: 48px;
+  }
+}
