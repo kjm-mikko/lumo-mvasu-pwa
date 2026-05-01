@@ -11,3 +11,18 @@ GET {{mVasu.Api_HostAddress}}/openapi/v1.json
 Accept: application/json
 
 ###
+
+# /api/me — vaatii bearer-tokenin Entra ID -tenantilta.
+# Tokenin hankinta devissae:
+#  1) Avaa PWA https://localhost:4200, kirjaudu (vaiheesta 9 alkaen)
+#  2) Tai Azure CLI: az account get-access-token --resource api://d2f69daf-210b-4f64-b402-7914c4c9d0b4
+#  3) Liitae token tähaen: @bearerToken = <eyJ...>
+
+@bearerToken =
+
+### Get authenticated user profile
+GET {{mVasu.Api_HostAddress}}/api/me
+Accept: application/json
+Authorization: Bearer {{bearerToken}}
+
+###

@@ -2,7 +2,7 @@
 
 Seuraavan sukupolven Lumo mVasu — DevExtreme Angular PWA + ASP.NET Core 10 Web API.
 
-> **Tila:** Aihio (skeleton). Vaihe 1/14 — solution-rakenne ja kehitysympäristö valmis.
+> **Tila:** Aihio (skeleton). Vaihe 3/14 — Entra ID -auth testidatalla, `/api/me` toimii.
 
 ---
 
@@ -29,12 +29,12 @@ PWA-puoli (`src/mVasu.Pwa/`) lisätään vaiheessa 8.
 ## Edellytykset
 
 | Työkalu | Versio | Käyttö |
-|---|---|---|
+| --- | --- | --- |
 | .NET SDK | 10.0.103 (lukittu `global.json`-tiedostolla) | Backend |
 | Node.js | ≥ 22 LTS | PWA build (vaiheesta 8 alkaen) |
 | npm | ≥ 11 | PWA-paketit |
 | SQL Server | Olemassa oleva instanssi (käyttäjäkohtainen) | XPO-data, vaiheesta 4 alkaen |
-| Visual Studio Code | Uusin | IDE (suositus) — kts. `.vscode/extensions.json` suositelluille laajennuksille |
+| Visual Studio Code | Uusin | IDE (suositus) — kts. `.vscode/extensions.json` |
 
 ### Ensikäyttö VS Codessa
 
@@ -46,7 +46,7 @@ PWA-puoli (`src/mVasu.Pwa/`) lisätään vaiheessa 8.
 
 ## Solution-rakenne
 
-```
+```text
 lumo-mvasu-pwa/
 ├── .vscode/                          VS Code -konfiguraatio (debug, tasks, suositukset)
 ├── design/                           Suunnitteluvaiheen tuotokset (tokenit, overrides, päätökset)
@@ -104,13 +104,27 @@ Tuotannossa connection string luetaan Azure Key Vaultista (pipeline-konfiguraati
 ## Entra ID -konfiguraatio
 
 | Asia | Arvo |
-|---|---|
+| --- | --- |
 | Tenant ID | `bc727d7a-3368-4926-86f4-0972d3ac4637` (Kojamo Oyj, single tenant) |
 | App Registration | `Lumo mVasu` — yhdistetty PWA SPA + Web API |
 | Client ID | `d2f69daf-210b-4f64-b402-7914c4c9d0b4` |
 | Scope | `api://d2f69daf-210b-4f64-b402-7914c4c9d0b4/access_as_user` |
 
 App Registrationin tarkat Azure Portal -asetukset dokumentoidaan `docs/entra-id-setup.md`-tiedostoon vaiheessa 3.
+
+### Suojattujen endpointtien testaaminen kehityksessä
+
+`/api/me` vaatii bearer-tokenin Lumo Entra ID -tenantilta scopella `access_as_user`. Tokenin hankinta devissä:
+
+```powershell
+# Vaihtoehto 1 — Azure CLI (vaatii Lumo-tilin)
+az login
+az account get-access-token --resource api://d2f69daf-210b-4f64-b402-7914c4c9d0b4 --query accessToken -o tsv
+```
+
+Vaihe 9:n jälkeen PWA hoitaa tokenin handlaamisen automaattisesti `https://localhost:4200`-osoitteessa.
+
+[`src/mVasu.Api/mVasu.Api.http`](src/mVasu.Api/mVasu.Api.http) sisältää valmiit REST Client -kutsut testaukseen.
 
 ---
 
@@ -127,11 +141,11 @@ Conventional Commits: `feat(api): ...`, `fix(pwa): ...`, `chore(deps): ...`.
 ## Toteutusjärjestys (vaiheet)
 
 1. ✅ Solution-rakenne + projektit + .vscode/ + global.json + .gitignore + README — *valmis*
-2. ⏳ Backend: minimi-API käynnistyy, `/api/health`, Scalar UI
-3. Backend: Entra ID -auth (kovakoodattu testidata)
-4. Backend: XPO-integraatio + xVasu-moduuli
+2. ✅ Backend: minimi-API käynnistyy, `/api/health`, Scalar UI — *valmis*
+3. ✅ Backend: Entra ID -auth (kovakoodattu testidata, `/api/me` toimii) — *valmis*
+4. ⏳ Backend: XPO-integraatio + xVasu-moduuli
 5. Backend: email-pohjainen käyttäjä-resolver (replikoi nykyinen mVasu)
-6. Backend: `/api/me`, `/api/me/settings`
+6. Backend: `/api/me/settings`
 7. Backend: `/api/me/location-consent`, `/api/me/location`
 8. Frontend: Angular + DevExtreme 25.2 + PWA + Lumo-tokenit
 9. Frontend: MSAL login flow

@@ -1,4 +1,8 @@
 using System.Reflection;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Identity.Web;
+using mVasu.Api.Authentication;
 using mVasu.Api.Contracts;
 using Scalar.AspNetCore;
 using Serilog;
@@ -25,6 +29,28 @@ builder.Host.UseSerilog((context, services, configuration) =>
         configuration.WriteTo.ApplicationInsights(aiConnectionString, TelemetryConverter.Traces);
     }
 });
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+
+const string AccessAsUserPolicy = "AccessAsUser";
+builder.Services.AddAuthorization(options =>
+{
+    var requiredScope = builder.Configuration["AzureAd:Scopes"] ?? "access_as_user";
+    options.AddPolicy(AccessAsUserPolicy, policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(context =>
+        {
+            var scopeClaim = context.User.FindFirst("scp")?.Value
+                ?? context.User.FindFirst("http://schemas.microsoft.com/identity/claims/scope")?.Value;
+            return scopeClaim?.Split(' ').Contains(requiredScope) == true;
+        });
+    });
+});
+
+builder.Services.AddScoped<IUserResolver, StaticTestUserResolver>();
 
 builder.Services.AddOpenApi();
 
@@ -59,6 +85,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapGet("/api/health", () => new HealthCheckDto(
         Status: "Healthy",
@@ -68,6 +96,20 @@ app.MapGet("/api/health", () => new HealthCheckDto(
     .WithName("GetHealth")
     .WithSummary("Liveness probe — returns API version and uptime. Anonymous.")
     .AllowAnonymous();
+
+app.MapGet("/api/me", async (ClaimsPrincipal user, IUserResolver resolver, CancellationToken ct) =>
+    {
+        var profile = await resolver.ResolveAsync(user, ct);
+        return profile is null
+            ? Results.Problem(
+                title: "User not provisioned",
+                detail: "Authenticated principal could not be resolved to a Lumo mVasu user.",
+                statusCode: StatusCodes.Status403Forbidden)
+            : Results.Ok(profile);
+    })
+    .WithName("GetCurrentUser")
+    .WithSummary("Returns the authenticated user's mVasu profile.")
+    .RequireAuthorization(AccessAsUserPolicy);
 
 try
 {
