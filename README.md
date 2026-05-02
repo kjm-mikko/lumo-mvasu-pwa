@@ -2,7 +2,7 @@
 
 Seuraavan sukupolven Lumo mVasu — DevExtreme Angular PWA + ASP.NET Core 10 Web API.
 
-> **Tila:** Aihio (skeleton). Vaihe 8/14 — frontend-runko (Angular 19 + DevExtreme 25.2 + PWA + Lumo-tokenit) valmis.
+> **Tila:** Aihio (skeleton). Vaihe 9/14 — Entra ID -kirjautuminen kytketty PWA:han (MSAL Authorization Code + PKCE).
 
 ---
 
@@ -41,6 +41,31 @@ PWA-puoli (`src/mVasu.Pwa/`) lisätään vaiheessa 8.
 1. Avaa repo VS Codessa → hyväksy "Recommended extensions" -kehotus
 2. F1 → "Tasks: Run Build Task" → `build:solution`
 3. F5 → "Launch API" (vaiheesta 2 alkaen tämä avaa Scalar UI:n automaattisesti)
+
+### HTTPS dev-sertin asentaminen (kerran per kone)
+
+Sekä `mVasu.Api` että `mVasu.Pwa` ajavat HTTPS:llä dev-ympäristössä. Aseta luotettu dev-sertti kerran:
+
+```powershell
+dotnet dev-certs https --trust
+```
+
+Tämä luo (tai varmistaa) sertin ja merkitsee sen luotetuksi Windowsin sertifikaattivarastoon. Sama sertti kelpaa sekä Kestrelille (`https://localhost:7216`) että muille `localhost`-palvelimille.
+
+PWA käynnistyy `https://localhost:4200`:llä — Angular Dev Server (`ng serve --ssl`) generoi oman self-signed-sertin jos sille ei anneta avain-/varmenne-tiedostoa, ja selain pyytää hyväksymisen kerran. Halutessa voit vaihtaa Angular-serverin käyttämään dotnet-dev-cert:iä:
+
+```powershell
+# Export dotnet dev cert as a .pem pair Angular can consume
+dotnet dev-certs https --export-path "$env:USERPROFILE\.aspnet\https\localhost.pem" --format Pem --no-password
+```
+
+ja päivittämään [src/mVasu.Pwa/package.json](src/mVasu.Pwa/package.json):n start-scriptiin:
+
+```text
+ng serve --ssl --ssl-key=<polku>/localhost.key --ssl-cert=<polku>/localhost.pem --host=localhost --port=4200
+```
+
+Aihiossa default `ng serve --ssl` riittää — selain hyväksyy self-signed-sertin kerran ja PWA toimii tämän jälkeen normaalisti.
 
 ---
 
@@ -171,7 +196,7 @@ Conventional Commits: `feat(api): ...`, `fix(pwa): ...`, `chore(deps): ...`.
 6. ✅ Backend: `PUT /api/me/settings` päivittää käyttäjäkohtaiset asetukset — *valmis*
 7. ✅ Backend: `PUT /api/me/location-consent`, `POST /api/me/location` (sijaintipalvelut) — *valmis*
 8. ✅ Frontend: Angular 19 + DevExtreme 25.2 + PWA + Lumo-tokenit (runko + reitit + ThemeService) — *valmis*
-9. Frontend: MSAL login flow
+9. ✅ Frontend: MSAL login flow (Authorization Code + PKCE, sessionStorage, MsalGuard, MsalInterceptor) — *valmis*
 10. Frontend: HTTP-interceptor + `/api/me`-kutsu
 11. Frontend: Etusivu (greeting, kortit, bottom tab / sidebar)
 12. Frontend: Asetukset-sivu

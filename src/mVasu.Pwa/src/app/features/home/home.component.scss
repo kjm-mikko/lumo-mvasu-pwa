@@ -11,6 +11,13 @@
 header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--lumo-space-md);
+}
+
+.user {
+  color: var(--lumo-text-secondary);
+  font-size: var(--lumo-fs-small);
 }
 
 .greeting {

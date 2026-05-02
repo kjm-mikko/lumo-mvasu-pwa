@@ -46,3 +46,19 @@ h2 {
   border-top: 1px dashed var(--lumo-border);
   padding-top: var(--lumo-space-md);
 }
+
+.logout {
+  align-self: flex-start;
+  background: transparent;
+  color: var(--lumo-danger);
+  border: 1px solid var(--lumo-danger);
+  border-radius: var(--lumo-radius-md);
+  font-family: var(--lumo-font-body);
+  font-size: var(--lumo-fs-small);
+  padding: var(--lumo-space-sm) var(--lumo-space-lg);
+  min-height: 44px;
+  cursor: pointer;
+  transition: background var(--lumo-duration-fast) var(--lumo-easing);
+
+  &:hover { background: var(--lumo-danger-subtle); }
+}

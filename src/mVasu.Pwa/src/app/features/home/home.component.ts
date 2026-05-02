@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { WordmarkComponent } from '../../shared/wordmark/wordmark.component';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-home',
@@ -9,11 +10,12 @@ import { WordmarkComponent } from '../../shared/wordmark/wordmark.component';
     <main class="home">
       <header>
         <lumo-wordmark size="sm" [showProduct]="true" />
+        <span class="user">{{ displayName() }}</span>
       </header>
 
       <section class="greeting">
         <h1>Tervetuloa Lumo mVasuun</h1>
-        <p>Aihio-vaihe 8/14 — frontend-runko valmis. Kirjautuminen kytketään vaiheessa 9.</p>
+        <p>Aihio-vaihe 9/14 — Entra ID -kirjautuminen toimii. Profiilin haku /api/me-endpointista lisätään vaiheessa 10.</p>
       </section>
 
       <section class="cards">
@@ -42,4 +44,11 @@ import { WordmarkComponent } from '../../shared/wordmark/wordmark.component';
   styleUrl: './home.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class HomeComponent {}
+export class HomeComponent {
+  private readonly auth = inject(AuthService);
+
+  readonly displayName = computed(() => {
+    const account = this.auth.account();
+    return account?.name ?? account?.username ?? '';
+  });
+}

@@ -1,5 +1,9 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { Router } from '@angular/router';
+import { toObservable } from '@angular/core/rxjs-interop';
+import { filter, take } from 'rxjs/operators';
 import { WordmarkComponent } from '../../shared/wordmark/wordmark.component';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-login',
@@ -10,7 +14,7 @@ import { WordmarkComponent } from '../../shared/wordmark/wordmark.component';
       <h1>Tervetuloa</h1>
       <p class="subhead">Kirjaudu Microsoft-tilillä jatkaaksesi.</p>
 
-      <button type="button" class="cta" disabled>
+      <button type="button" class="cta" (click)="login()">
         Kirjaudu Microsoft-tilillä
       </button>
 
@@ -22,4 +26,19 @@ import { WordmarkComponent } from '../../shared/wordmark/wordmark.component';
   styleUrl: './login.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class LoginComponent {}
+export class LoginComponent {
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+
+  constructor() {
+    // If the user is already authenticated (e.g. revisits /auth/login), bounce
+    // them straight to /home rather than showing the login button again.
+    toObservable(this.auth.isAuthenticated)
+      .pipe(filter(Boolean), take(1))
+      .subscribe(() => this.router.navigateByUrl('/home'));
+  }
+
+  login(): void {
+    this.auth.loginRedirect();
+  }
+}
