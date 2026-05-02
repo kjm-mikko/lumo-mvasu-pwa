@@ -8,7 +8,7 @@ interface NavItem {
   readonly label: string;
   readonly route?: string;
   readonly disabled: boolean;
-  readonly icon: 'home' | 'users' | 'contract' | 'gear';
+  readonly icon: 'home' | 'list' | 'users' | 'contract' | 'gear';
 }
 
 @Component({
@@ -90,6 +90,12 @@ interface NavItem {
             <path d="M3 12 12 3l9 9" />
             <path d="M5 10v10h4v-6h6v6h4V10" />
           }
+          @case ('list') {
+            <path d="M8 6h13M8 12h13M8 18h13" />
+            <circle cx="3.5" cy="6" r="1" fill="currentColor" />
+            <circle cx="3.5" cy="12" r="1" fill="currentColor" />
+            <circle cx="3.5" cy="18" r="1" fill="currentColor" />
+          }
           @case ('users') {
             <circle cx="9" cy="8" r="3.5" />
             <circle cx="17.5" cy="9.5" r="2.5" />
@@ -115,6 +121,7 @@ interface NavItem {
 export class MainLayoutComponent {
   protected readonly navItems: ReadonlyArray<NavItem> = [
     { label: 'Etusivu', route: '/home', disabled: false, icon: 'home' },
+    { label: 'Tiskilista', route: '/tiskilista', disabled: false, icon: 'list' },
     { label: 'Asiakkaat', disabled: true, icon: 'users' },
     { label: 'Sopimukset', disabled: true, icon: 'contract' },
     { label: 'Asetukset', route: '/settings', disabled: false, icon: 'gear' },

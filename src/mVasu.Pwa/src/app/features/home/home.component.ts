@@ -26,6 +26,10 @@ import type { UserProfileDto } from '../../core/models/user-profile.dto';
       <section>
         <h2 class="section-h">Saatavilla nyt</h2>
         <div class="cards">
+          <a class="card card--available" routerLink="/tiskilista">
+            <h3>Tiskilista</h3>
+            <p>Vapautuvat huoneistot, hakukenttä ja sijaintipohjainen järjestys.</p>
+          </a>
           <a class="card card--available" routerLink="/settings">
             <h3>Asetukset</h3>
             <p>Mieluisin nimi, teema, kieli ja sijaintipalvelut.</p>
