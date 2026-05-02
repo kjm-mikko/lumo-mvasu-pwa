@@ -2,7 +2,7 @@
 
 Seuraavan sukupolven Lumo mVasu — DevExtreme Angular PWA + ASP.NET Core 10 Web API.
 
-> **Tila:** Aihio (skeleton). Vaihe 3/14 — Entra ID -auth testidatalla, `/api/me` toimii.
+> **Tila:** Aihio (skeleton). Vaihe 4/14 — XPO + xVasu-moduuli kytketty, `/api/health/db` toimii.
 
 ---
 
@@ -87,7 +87,7 @@ Vaihtoehto: PAT (Personal Access Token) Azure DevOpsista, jolla `Packaging (read
 
 ---
 
-## Tietokantayhteys (vaiheesta 4 alkaen)
+## Tietokantayhteys
 
 Connection stringiä **ei pidetä repossa**. Aseta paikallisesti User Secretsiin:
 
@@ -98,6 +98,24 @@ dotnet user-secrets set "ConnectionStrings:VasuDb" "<connection string omasta tu
 ```
 
 Tuotannossa connection string luetaan Azure Key Vaultista (pipeline-konfiguraatio rakennetaan myöhemmin).
+
+### Yhteyden testaaminen
+
+API tarjoaa anonyymin endpointin yhteyden todentamiseen:
+
+```http
+GET https://localhost:7216/api/health/db
+```
+
+Vastaa `200 OK` + `{ connected: true, durationMs: ..., error: null }` kun XPO avaa session ja saa `SELECT 1` -tuloksen onnistuneesti, muuten `503 Service Unavailable` ja `error`-kenttä kertoo poikkeuksen tyypin (esim. `SqlException`).
+
+XPO-rekisteröinti rakennettu [src/mVasu.Api/Data/XpoServiceCollectionExtensions.cs](src/mVasu.Api/Data/XpoServiceCollectionExtensions.cs):
+
+- `IXpoDataStoreProvider` singleton — connection string luetaan vasta ensimmäisen request:in yhteydessä
+- `IObjectSpaceProvider` singleton, threadSafe, jaettu data layer kaikkien requestien välillä
+- `xVasu.Data.Security.xVasuSecuritySystemUser` ja muut xVasu-luokat tunnistuvat assemblysta automaattisesti
+
+Vaiheessa 5 `XPObjectSpaceProvider` korvataan `SecuredObjectSpaceProvider`:lla, joka kytkee `SecurityStrategyComplex`:in autentikoituun käyttäjään.
 
 ---
 
@@ -143,8 +161,8 @@ Conventional Commits: `feat(api): ...`, `fix(pwa): ...`, `chore(deps): ...`.
 1. ✅ Solution-rakenne + projektit + .vscode/ + global.json + .gitignore + README — *valmis*
 2. ✅ Backend: minimi-API käynnistyy, `/api/health`, Scalar UI — *valmis*
 3. ✅ Backend: Entra ID -auth (kovakoodattu testidata, `/api/me` toimii) — *valmis*
-4. ⏳ Backend: XPO-integraatio + xVasu-moduuli
-5. Backend: email-pohjainen käyttäjä-resolver (replikoi nykyinen mVasu)
+4. ✅ Backend: XPO + xVasu-moduuli, `/api/health/db` — *valmis*
+5. ⏳ Backend: email-pohjainen käyttäjä-resolver (replikoi nykyinen mVasu)
 6. Backend: `/api/me/settings`
 7. Backend: `/api/me/location-consent`, `/api/me/location`
 8. Frontend: Angular + DevExtreme 25.2 + PWA + Lumo-tokenit
@@ -160,6 +178,7 @@ Conventional Commits: `feat(api): ...`, `fix(pwa): ...`, `chore(deps): ...`.
 ## Kirjoitusasut
 
 Lumon brändiohjeissa pakolliset:
+
 - **Lumo** kirjoitetaan AINA isolla alkukirjaimella
 - **mVasu** kirjoitetaan AINA tarkalleen näin: pieni `m`, iso `V`, loput pieniä
 

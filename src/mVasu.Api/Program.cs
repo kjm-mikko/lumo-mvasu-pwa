@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Identity.Web;
 using mVasu.Api.Authentication;
 using mVasu.Api.Contracts;
+using mVasu.Api.Data;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
@@ -52,6 +53,8 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddScoped<IUserResolver, StaticTestUserResolver>();
 
+builder.Services.AddVasuXpo(builder.Configuration);
+
 builder.Services.AddOpenApi();
 
 const string DevCorsPolicy = "LumoPwaDev";
@@ -95,6 +98,17 @@ app.MapGet("/api/health", () => new HealthCheckDto(
         Timestamp: DateTimeOffset.UtcNow))
     .WithName("GetHealth")
     .WithSummary("Liveness probe — returns API version and uptime. Anonymous.")
+    .AllowAnonymous();
+
+app.MapGet("/api/health/db", async (IDbHealthCheck check, CancellationToken ct) =>
+    {
+        var result = await check.CheckAsync(ct);
+        return result.Connected
+            ? Results.Ok(result)
+            : Results.Json(result, statusCode: StatusCodes.Status503ServiceUnavailable);
+    })
+    .WithName("GetDbHealth")
+    .WithSummary("Verifies the XPO data layer can open a connection. Anonymous.")
     .AllowAnonymous();
 
 app.MapGet("/api/me", async (ClaimsPrincipal user, IUserResolver resolver, CancellationToken ct) =>
