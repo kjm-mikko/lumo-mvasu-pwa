@@ -2,7 +2,7 @@ using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Xpo;
 using DevExpress.Xpo.DB;
 using mVasu.Api.Domain;
-using xVasu.Data.Security;
+using xVasu.Module;
 
 namespace mVasu.Api.Data;
 
@@ -10,37 +10,43 @@ public static class XpoServiceCollectionExtensions
 {
     public static IServiceCollection AddVasuXpo(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddSingleton<IXpoDataStoreProvider>(_ =>
-        {
-            var connectionString = configuration.GetConnectionString("VasuDb")
-                ?? throw new InvalidOperationException(
-                    "Connection string 'VasuDb' is not configured. " +
-                    "Set it via: dotnet user-secrets set ConnectionStrings:VasuDb \"<dev connection string>\".");
+        var connectionString = configuration.GetConnectionString("VasuDb")
+            ?? throw new InvalidOperationException(
+                "Connection string 'VasuDb' is not configured. " +
+                "Set it via: dotnet user-secrets set ConnectionStrings:VasuDb \"<dev connection string>\".");
 
-            // SchemaAlreadyExists: never emit DDL. All schema changes are applied
-            // manually by the database owner — see db/scripts/ for the latest set.
-            // Equivalent to XafApplication.SchemaUpdateMode = SchemaUpdateMode.None
-            // if we ever migrate to a XafApplication-hosted setup.
-            return new MutableSchemaDataStoreProvider(
-                connectionString,
-                AutoCreateOption.SchemaAlreadyExists);
+        // Build the XafApplication host once during DI setup. Setup() walks all
+        // modules, collects their AdditionalExportedTypes, and populates
+        // XafTypesInfo + the XPDictionary so CompositeObjectSpace.FindObject
+        // can resolve any persistent type the resolver or future endpoints touch.
+        // SchemaUpdateMode.None ensures the runtime never emits DDL — all schema
+        // changes go through db/scripts/ run manually.
+        services.AddSingleton<XafApplication>(_ =>
+        {
+            var application = new MVasuApiApplication
+            {
+                ConnectionString = connectionString,
+            };
+
+            application.Modules.Add(new xVasuModule());
+            application.Modules.Add(new MVasuApiModule());
+
+            application.CreateCustomObjectSpaceProvider += (_, e) =>
+            {
+                e.ObjectSpaceProvider = new XPObjectSpaceProvider(
+                    new MutableSchemaDataStoreProvider(
+                        connectionString,
+                        AutoCreateOption.SchemaAlreadyExists),
+                    threadSafe: true,
+                    useSeparateDataLayers: false);
+            };
+
+            application.Setup();
+            return application;
         });
 
         services.AddSingleton<IObjectSpaceProvider>(sp =>
-        {
-            // XAF requires explicit XafTypesInfo registration before
-            // IObjectSpace.FindObject<T> can resolve the type. Without this
-            // the framework throws "class is not registered within the business
-            // model" because we are not running inside a XafApplication.Setup pipeline.
-            XafTypesInfo.Instance.RegisterEntity(typeof(xVasuSecuritySystemUser));
-            XafTypesInfo.Instance.RegisterEntity(typeof(xVasuSecuritySystemRole));
-            XafTypesInfo.Instance.RegisterEntity(typeof(MVasuUserSettings));
-
-            return new XPObjectSpaceProvider(
-                sp.GetRequiredService<IXpoDataStoreProvider>(),
-                threadSafe: true,
-                useSeparateDataLayers: false);
-        });
+            sp.GetRequiredService<XafApplication>().ObjectSpaceProvider);
 
         services.AddScoped<IDbHealthCheck, XpoDbHealthCheck>();
 

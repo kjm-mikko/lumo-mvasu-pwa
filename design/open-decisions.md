@@ -267,6 +267,47 @@ xVasun `xVasuSecuritySystemUser`-luokassa ei ole mVasun käyttäjäkohtaisia ase
 
 ---
 
+## OD-010 · XAF-hostaus mVasu.Api:ssa (XafApplication vs. XPO suora)
+
+**Status:** Päätetty
+**Päätetty:** 2026-05-02
+**Päättäjä:** Toteutusvaihe 5
+
+### Konteksti
+
+`xVasu.Module` on rakennettu XAF-päälle: sen luokat (`xVasuSecuritySystemUser`, `xVasuSecuritySystemRole`, jne.) toimivat `CompositeObjectSpace.FindObject`:in kautta vain kun ne ovat rekisteröityjä XAF:n business-mallissa. Manuaalinen `XafTypesInfo.Instance.RegisterEntity()` ei riitä — XAF vaatii koko `XafApplication.Setup`-pipelinen joka kerää moduulien `AdditionalExportedTypes`:t ja rakentaa täyden `BusinessClassDescriptor`-metadatan.
+
+Kokeiltiin vaihtoehtoja:
+
+1. **`XafTypesInfo.RegisterEntity` yksittäin** — ei toiminut (sama virhe pysyi)
+2. **Assembly-scan + `RegisterEntity`** — ei toiminut
+3. **XPO Session-direct** (`((XPObjectSpace)os).Session.FindObject<T>`) — toimi `xVasuSecuritySystemUser`:lle, mutta `MVasuUserSettings` aiheutti `ThreadSafeDataLayer`-lukon (`Cannot modify Dictionary because ThreadSafeDataLayer uses it`). Dynaaminen tyyppi-luonti per-request ei toiminut yhdessä jaetun data layer:in kanssa
+4. **Täysi XafApplication-hosting** — toimii
+
+### Nykyinen valinta
+
+**Vaihtoehto 4 — XafApplication-hosting headless-tilassa.** Tämä on XAF:n suunniteltu reitti.
+
+Toteutus:
+
+- [`MVasuApiModule`](../src/mVasu.Api/Domain/MVasuApiModule.cs): `ModuleBase`-aliluokka joka kerää `AdditionalExportedTypes`-listalle kaikki `xVasu.*`-namespacen `PersistentBase`-pohjaiset tyypit (assembly-scan) sekä `MVasuUserSettings`
+- [`MVasuApiApplication`](../src/mVasu.Api/Data/MVasuApiApplication.cs): `XafApplication`-aliluokka, joka heittää `NotSupported`-poikkeuksen `CreateLayoutManagerCore`:ssa (UI-managerit eivät kosketa Web API -hostia)
+- DI rekisteröi `XafApplication`-singletonin, kutsuu `Setup()` kerran sovelluksen alussa, ja `IObjectSpaceProvider` haetaan applikaatiosta
+
+### Perustelut
+
+- XAF business-model rakentuu kerralla, ei yritetä kiertää sen invariantteja
+- Tulevien permission-pohjaisten näkymien (`SecurityStrategyComplex`) liittäminen on suoraviivaista — applikaatio on jo olemassa
+- Resolver käyttää tavallista `IObjectSpace.FindObject<T>`:ta — ei erikoiscasteja
+- Saadaan XAF:n full meta (associations, validation, conditional appearance) saataville myöhempiä vaiheita varten
+
+### Trigger uudelleenarviointiin
+
+- Jos Setup-pipeline näkyy ongelmana (esim. käynnistysaika, muistinkulutus), harkitaan kevyempää `DevExpress.ExpressApp.AspNetCore`-pakettia jos sellainen julkaistaan tähän skenaarioon
+- Jos joskus halutaan poistaa xVasu-riippuvuus kokonaan, palataan suoraan XPO:hon ilman XAF:ia (mutta silloin pitää myös duplikoida domain-luokat)
+
+---
+
 ## Päätösten lisäysohje
 
 Uusia päätöksiä lisätään seuraavalla sapluunalla:
