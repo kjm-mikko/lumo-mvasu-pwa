@@ -1,0 +1,48 @@
+.settings {
+  min-height: 100dvh;
+  background: var(--lumo-bg);
+  color: var(--lumo-text-primary);
+  padding: var(--lumo-space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-lg);
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.back {
+  color: var(--lumo-primary);
+  text-decoration: none;
+  font-size: var(--lumo-fs-small);
+  &:hover { text-decoration: underline; }
+}
+
+h1 {
+  font-family: var(--lumo-font-heading);
+  font-size: var(--lumo-fs-h1);
+  margin: 0;
+}
+
+h2 {
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-medium);
+  font-size: var(--lumo-fs-h3);
+  color: var(--lumo-text-secondary);
+  margin: 0 0 var(--lumo-space-sm);
+}
+
+.radio {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-sm);
+  padding: var(--lumo-space-sm) 0;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.placeholder {
+  color: var(--lumo-text-tertiary);
+  font-size: var(--lumo-fs-small);
+  border-top: 1px dashed var(--lumo-border);
+  padding-top: var(--lumo-space-md);
+}
