@@ -1,0 +1,23 @@
+.wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--lumo-space-sm);
+  font-family: var(--lumo-font-heading);
+  font-weight: var(--lumo-fw-semibold);
+  color: var(--lumo-primary);
+  font-size: 32px;
+  line-height: var(--lumo-lh-tight);
+
+  &--small {
+    font-size: 18px;
+  }
+}
+
+.product {
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-medium);
+  font-size: 0.5em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lumo-text-secondary);
+}

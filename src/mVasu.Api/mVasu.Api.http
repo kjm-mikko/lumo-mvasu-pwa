@@ -1,0 +1,69 @@
+@mVasu.Api_HostAddress = https://localhost:7216
+
+### Health check (anonyymi)
+GET {{mVasu.Api_HostAddress}}/api/health
+Accept: application/json
+
+###
+
+### OpenAPI document (development only)
+GET {{mVasu.Api_HostAddress}}/openapi/v1.json
+Accept: application/json
+
+###
+
+# /api/me — vaatii bearer-tokenin Entra ID -tenantilta.
+# Tokenin hankinta devissae:
+#  1) Avaa PWA https://localhost:4200, kirjaudu (vaiheesta 9 alkaen)
+#  2) Tai Azure CLI: az account get-access-token --resource api://d2f69daf-210b-4f64-b402-7914c4c9d0b4
+#  3) Liitae token tähaen: @bearerToken = <eyJ...>
+
+@bearerToken =
+
+### Get authenticated user profile
+GET {{mVasu.Api_HostAddress}}/api/me
+Accept: application/json
+Authorization: Bearer {{bearerToken}}
+
+###
+
+### Update user settings
+PUT {{mVasu.Api_HostAddress}}/api/me/settings
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer {{bearerToken}}
+
+{
+    "preferredName": "Mikko",
+    "theme": "dark",
+    "language": "fi"
+}
+
+###
+
+### Update location consent
+PUT {{mVasu.Api_HostAddress}}/api/me/location-consent
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer {{bearerToken}}
+
+{
+    "consent": true
+}
+
+###
+
+### Record latest location (requires consent === true)
+POST {{mVasu.Api_HostAddress}}/api/me/location
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer {{bearerToken}}
+
+{
+    "latitude": 60.1699,
+    "longitude": 24.9384,
+    "accuracy": 12.5,
+    "recordedAt": "2026-05-02T08:30:00Z"
+}
+
+###

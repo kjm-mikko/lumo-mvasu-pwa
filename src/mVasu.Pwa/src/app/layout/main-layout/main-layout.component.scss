@@ -1,0 +1,137 @@
+:host {
+  display: block;
+  min-height: 100dvh;
+  background: var(--lumo-bg);
+  color: var(--lumo-text-primary);
+}
+
+.layout {
+  display: flex;
+  min-height: 100dvh;
+}
+
+.sidebar {
+  display: none;
+}
+
+.content {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
+}
+
+.tabbar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  height: 64px;
+  padding-bottom: env(safe-area-inset-bottom);
+  display: flex;
+  background: var(--lumo-surface-elevated);
+  border-top: 1px solid var(--lumo-border);
+  box-shadow: var(--lumo-shadow-sm);
+  z-index: var(--lumo-z-sticky);
+}
+
+.tab {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--lumo-text-tertiary);
+  text-decoration: none;
+  font-size: var(--lumo-fs-caption);
+  font-family: var(--lumo-font-body);
+  min-height: 64px;
+  transition: color var(--lumo-duration-fast) var(--lumo-easing);
+
+  &.active {
+    color: var(--lumo-primary);
+  }
+
+  &.tab--disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.tab-label {
+  font-size: 11px;
+  letter-spacing: 0.01em;
+}
+
+.icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  color: var(--lumo-text-secondary);
+  text-decoration: none;
+  position: relative;
+  transition: color var(--lumo-duration-fast) var(--lumo-easing),
+              background var(--lumo-duration-fast) var(--lumo-easing);
+
+  &:hover { background: var(--lumo-surface); }
+
+  &.active {
+    color: var(--lumo-primary);
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset-block: 8px;
+      left: 0;
+      width: 3px;
+      background: var(--lumo-primary);
+      border-radius: 0 3px 3px 0;
+    }
+  }
+
+  &--disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+
+    &:hover { background: transparent; }
+  }
+}
+
+.brand {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--lumo-border);
+}
+
+@media (min-width: 768px) {
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 56px;
+    flex: 0 0 56px;
+    border-right: 1px solid var(--lumo-border);
+    background: var(--lumo-surface);
+  }
+
+  .tabbar {
+    display: none;
+  }
+
+  .content {
+    padding-bottom: 0;
+  }
+
+  .nav-item .icon {
+    width: 24px;
+    height: 24px;
+  }
+}

@@ -1,0 +1,23 @@
+/* =========================================================================
+   Lumo mVasu PWA — global styles entry point.
+
+   Order is significant:
+     1. Self-hosted variable fonts (offline, no CDN dependency).
+     2. DevExtreme stock theme as a base — Lumo tokens override its
+        CSS variables, and the overrides file targets specific selectors.
+     3. Lumo design tokens (light + dark) from design/lumo-tokens.css.
+     4. DevExtreme component overrides applying Lumo tokens to dx-*
+        components used by the PWA.
+   ========================================================================= */
+
+@use '@fontsource-variable/inter';
+@use '@fontsource-variable/playfair-display';
+@use 'devextreme/dist/css/dx.material.blue.light.css';
+@use '../../../design/lumo-tokens.css';
+@use '../../../design/lumo-devextreme-overrides.scss';
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
