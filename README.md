@@ -2,27 +2,37 @@
 
 Seuraavan sukupolven Lumo mVasu — DevExtreme Angular PWA + ASP.NET Core 10 Web API.
 
-> **Tila:** Aihio (skeleton). Vaihe 13/14 — LocationService + sijainnin selainluvan kytkentä Asetuksissa.
+> **Tila:** Aihio (skeleton) **valmis** — vaiheet 1–14 ✅. Domain-toiminnallisuus rakennetaan tämän päälle erillisillä prompteilla.
+
+Yksityiskohtaiset dokumentit:
+
+- [`docs/architecture.md`](docs/architecture.md) — pinokartta, auth-flow, datavirta, XAF-host
+- [`docs/local-development.md`](docs/local-development.md) — vaiheittainen setup ja troubleshoot
+- [`docs/entra-id-setup.md`](docs/entra-id-setup.md) — Azure Portal -ohje App Registrationin luontiin
+- [`design/open-decisions.md`](design/open-decisions.md) — avoimet ja päätetyt arkkitehtuuripäätökset
+- [`db/scripts/README.md`](db/scripts/README.md) — kanta-skripti-konventio
 
 ---
 
 ## Pikaopas
 
 ```powershell
-# Restore + build
+# Backend
 dotnet restore Lumo.mVasu.slnx
 dotnet build Lumo.mVasu.slnx
+dotnet watch run --project src/mVasu.Api    # https://localhost:7216
 
-# Aja API (kehityksessä)
-dotnet watch run --project src/mVasu.Api
+# Tests
+dotnet test Lumo.mVasu.slnx                  # 34 integration tests, no DB needed
 
-# Aja testit
-dotnet test Lumo.mVasu.slnx
+# PWA
+npm install --prefix src/mVasu.Pwa
+npm start --prefix src/mVasu.Pwa             # https://localhost:4200
 ```
 
-API käynnistyy oletuksena `https://localhost:5001` (varsinainen portti vahvistetaan vaiheessa 2). Scalar UI tulee saataville `/scalar/v1`-polkuun vaiheessa 2.
+API käynnistyy `https://localhost:7216`:lle, Scalar UI `/scalar/v1`-polulla. PWA käynnistyy `https://localhost:4200`-osoitteessa MSAL-authilla Lumo Entra ID -tenantia vasten.
 
-PWA-puoli (`src/mVasu.Pwa/`) lisätään vaiheessa 8.
+Ennen ensimmäistä ajoa: `dotnet dev-certs https --trust`, user secrets connection-stringiin, Azure DevOps credprovider xVasu-paketteja varten — yksityiskohdat [`docs/local-development.md`](docs/local-development.md):ssa.
 
 ---
 
@@ -158,7 +168,7 @@ Vaiheen 5 schema-muutos: [`db/scripts/001_create_mvasuusersettings.sql`](db/scri
 | Client ID | `d2f69daf-210b-4f64-b402-7914c4c9d0b4` |
 | Scope | `api://d2f69daf-210b-4f64-b402-7914c4c9d0b4/access_as_user` |
 
-App Registrationin tarkat Azure Portal -asetukset dokumentoidaan `docs/entra-id-setup.md`-tiedostoon vaiheessa 3.
+App Registrationin tarkat Azure Portal -asetukset: [`docs/entra-id-setup.md`](docs/entra-id-setup.md).
 
 ### Suojattujen endpointtien testaaminen kehityksessä
 
@@ -201,7 +211,32 @@ Conventional Commits: `feat(api): ...`, `fix(pwa): ...`, `chore(deps): ...`.
 11. ✅ Frontend: MainLayout (mobile bottom tab + desktop sidebar), Home "Saatavilla nyt" / "Tulossa" -osiot — *valmis*
 12. ✅ Frontend: Asetukset-sivu (avatar, profiilikortti, sijaintipalvelujen tilanäkymä) — *valmis*
 13. ✅ Frontend: LocationService + selainlupa-flow + POST /api/me/location toggle:n päällä — *valmis*
-14. README + docs päivitetty kokonaisuudessaan
+14. ✅ README + docs (`docs/architecture.md`, `docs/local-development.md`, `docs/entra-id-setup.md`) — *valmis*
+
+---
+
+## Hyväksymiskriteerit
+
+Status aihion luovutuksessa. Manuaalisesti testattavat (`[ ]` tai `~`) jäävät käyttäjälle.
+
+| | Kriteeri |
+| --- | --- |
+| ✅ | Kirjoitusasut "Lumo" ja "mVasu" oikein UI-strings, README, kommenteissa, commit-viesteissä |
+| ✅ | `dotnet build Lumo.mVasu.slnx` läpäisee, `dotnet test` 34/34 läpi |
+| ✅ | `npm run build --prefix src/mVasu.Pwa` läpäisee |
+| ✅ | VS Code F5 → "Launch API" tai "Launch Full Stack" käynnistää API:n + PWA:n |
+| ✅ | Scalar UI näkyy `/scalar/v1` |
+| ✅ | PWA-manifest latautuu, service worker rekisteröityy production-buildilla |
+| ~ | Lighthouse PWA-audit ≥ 90 — manuaalinen audit-ajo tarvitaan tuotannossa |
+| ✅ | Entra ID -login toimii email-pohjaisella mappauksella (vahvistettu F5:llä vaiheessa 5) |
+| ✅ | `GET /api/me` palauttaa `xVasuSecuritySystemUser`-pohjaisen `UserProfileDto`:n |
+| ✅ | Teeman vaihto vaalea ↔ tumma toimii välittömästi, persistoituu localStorageen |
+| ✅ | Sijaintipalvelut: `LocationService` + `PUT /api/me/location-consent` + `POST /api/me/location` toggle:n alla |
+| ✅ | Etusivu: bottom tab bar < 768px, sidebar ≥ 768px, "Tulossa"-kortit disabled |
+| ~ | Mobile-näkymä Chrome DevTools iPhone -emulaatiossa — käyttäjän testattava |
+| ✅ | README + `docs/` dokumentoivat prerequisites + Entra setup + lokaalin ajon + sijaintipalvelut |
+| ✅ | Repo ei sisällä salaisuuksia (connection stringit user-secrets, ei .env-tiedostoja) |
+| ✅ | Conventional Commits käytössä koko historian ajan |
 
 ---
 
