@@ -11,7 +11,10 @@ public class MVasuUserSettings : BaseObject
 {
     public MVasuUserSettings(Session session) : base(session) { }
 
-    [Association]
+    // One-way XPO reference (no [Association]): the FK lives only on this side,
+    // xVasuSecuritySystemUser is not modified to expose a settings collection.
+    // Keeping the relation one-way means we own all schema and code changes
+    // on the mVasu.Api side and never have to republish xVasu.Module.
     public xVasuSecuritySystemUser User
     {
         get => GetPropertyValue<xVasuSecuritySystemUser>(nameof(User));
