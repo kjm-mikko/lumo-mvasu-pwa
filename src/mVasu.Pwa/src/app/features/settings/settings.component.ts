@@ -6,7 +6,6 @@ import {
   signal,
 } from '@angular/core';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { ThemeService, type LumoTheme } from '../../core/services/theme.service';
@@ -21,10 +20,9 @@ interface SettingsForm {
 
 @Component({
   selector: 'app-settings',
-  imports: [RouterLink, ReactiveFormsModule],
+  imports: [ReactiveFormsModule],
   template: `
     <main class="settings">
-      <a class="back" routerLink="/home">← Takaisin</a>
       <h1>Asetukset</h1>
 
       @if (profile(); as p) {

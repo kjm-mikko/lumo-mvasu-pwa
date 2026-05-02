@@ -18,16 +18,22 @@ export const routes: Routes = [
       import('./features/auth-callback/auth-callback.component').then(m => m.AuthCallbackComponent),
   },
   {
-    path: 'home',
+    path: '',
     canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/home/home.component').then(m => m.HomeComponent),
-  },
-  {
-    path: 'settings',
-    canActivate: [authGuard],
-    loadComponent: () =>
-      import('./features/settings/settings.component').then(m => m.SettingsComponent),
+      import('./layout/main-layout/main-layout.component').then(m => m.MainLayoutComponent),
+    children: [
+      {
+        path: 'home',
+        loadComponent: () =>
+          import('./features/home/home.component').then(m => m.HomeComponent),
+      },
+      {
+        path: 'settings',
+        loadComponent: () =>
+          import('./features/settings/settings.component').then(m => m.SettingsComponent),
+      },
+    ],
   },
   {
     path: '**',

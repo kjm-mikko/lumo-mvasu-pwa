@@ -2,7 +2,7 @@
 
 Seuraavan sukupolven Lumo mVasu — DevExtreme Angular PWA + ASP.NET Core 10 Web API.
 
-> **Tila:** Aihio (skeleton). Vaihe 10/14 — PWA hakee profiilin /api/me:stä ja tallentaa asetukset + sijaintiluvan.
+> **Tila:** Aihio (skeleton). Vaihe 11/14 — etusivu valmis, mobiilissa bottom tab bar, desktopissa sidebar.
 
 ---
 
@@ -198,7 +198,7 @@ Conventional Commits: `feat(api): ...`, `fix(pwa): ...`, `chore(deps): ...`.
 8. ✅ Frontend: Angular 19 + DevExtreme 25.2 + PWA + Lumo-tokenit (runko + reitit + ThemeService) — *valmis*
 9. ✅ Frontend: MSAL login flow (Authorization Code + PKCE, sessionStorage, MsalGuard, MsalInterceptor) — *valmis*
 10. ✅ Frontend: `/api/me`-kutsu, settings-lomake, sijaintilupa-toggle — *valmis*
-11. Frontend: Etusivu (greeting, kortit, bottom tab / sidebar)
+11. ✅ Frontend: MainLayout (mobile bottom tab + desktop sidebar), Home "Saatavilla nyt" / "Tulossa" -osiot — *valmis*
 12. Frontend: Asetukset-sivu
 13. Frontend: LocationService + sijaintipalvelut-osio
 14. README + docs päivitetty kokonaisuudessaan
