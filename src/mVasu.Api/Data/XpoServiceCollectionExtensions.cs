@@ -17,11 +17,13 @@ public static class XpoServiceCollectionExtensions
                     "Connection string 'VasuDb' is not configured. " +
                     "Set it via: dotnet user-secrets set ConnectionStrings:VasuDb \"<dev connection string>\".");
 
-            // DatabaseAndSchema: additive — creates the MVasuUserSettings table on
-            // first connect, leaves existing xVasu tables untouched.
+            // SchemaAlreadyExists: never emit DDL. All schema changes are applied
+            // manually by the database owner — see db/scripts/ for the latest set.
+            // Equivalent to XafApplication.SchemaUpdateMode = SchemaUpdateMode.None
+            // if we ever migrate to a XafApplication-hosted setup.
             return new MutableSchemaDataStoreProvider(
                 connectionString,
-                AutoCreateOption.DatabaseAndSchema);
+                AutoCreateOption.SchemaAlreadyExists);
         });
 
         services.AddSingleton<IObjectSpaceProvider>(sp =>

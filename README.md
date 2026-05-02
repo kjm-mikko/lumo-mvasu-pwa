@@ -113,9 +113,14 @@ XPO-rekisteröinti rakennettu [src/mVasu.Api/Data/XpoServiceCollectionExtensions
 
 - `IXpoDataStoreProvider` singleton — connection string luetaan vasta ensimmäisen request:in yhteydessä
 - `IObjectSpaceProvider` singleton, threadSafe, jaettu data layer kaikkien requestien välillä
-- `xVasu.Data.Security.xVasuSecuritySystemUser` ja muut xVasu-luokat tunnistuvat assemblysta automaattisesti
+- `xVasu.Data.Security.xVasuSecuritySystemUser`, `xVasuSecuritySystemRole` ja `MVasuUserSettings` rekisteröidään `XafTypesInfo`:hen ennen ensimmäistä `IObjectSpace.FindObject`-kutsua
+- `AutoCreateOption.SchemaAlreadyExists` — sovellus **ei koskaan** muokkaa kantarakennetta
 
-Vaiheessa 5 `XPObjectSpaceProvider` korvataan `SecuredObjectSpaceProvider`:lla, joka kytkee `SecurityStrategyComplex`:in autentikoituun käyttäjään.
+### Schema-muutokset (manuaalisesti)
+
+Kaikki DDL-muutokset (uudet taulut, sarakkeet) toimitetaan käsin ajettavina SQL-skripteinä [`db/scripts/`](db/scripts/)-kansiossa. Sovelluksen ajaminen ei luo eikä muokkaa tauluja missään ympäristössä.
+
+Vaiheen 5 schema-muutos: [`db/scripts/001_create_mvasuusersettings.sql`](db/scripts/001_create_mvasuusersettings.sql) — luo `MVasuUserSettings`-taulun. Aja kerran ennen ensimmäistä `/api/me`-kutsua testikannassa.
 
 ---
 
