@@ -227,7 +227,8 @@ Status aihion luovutuksessa. Manuaalisesti testattavat (`[ ]` tai `~`) jäävät
 | ✅ | VS Code F5 → "Launch API" tai "Launch Full Stack" käynnistää API:n + PWA:n |
 | ✅ | Scalar UI näkyy `/scalar/v1` |
 | ✅ | PWA-manifest latautuu, service worker rekisteröityy production-buildilla |
-| ~ | Lighthouse PWA-audit ≥ 90 — manuaalinen audit-ajo tarvitaan tuotannossa |
+| ~ | PWA installable Chromessa (osoiteriviin ilmestyy ⊕-asennusikoni production-buildilla) — manuaalinen tarkistus DevTools → Application -välilehdellä. *Korvaa vanhentuneen "Lighthouse PWA ≥ 90" kriteerin: Lighthouse-PWA-kategoria poistettu Chrome 117:ssä.* |
+| ~ | Lighthouse Performance ≥ 80 production-buildilla incognito-ikkunassa — manuaalinen audit |
 | ✅ | Entra ID -login toimii email-pohjaisella mappauksella (vahvistettu F5:llä vaiheessa 5) |
 | ✅ | `GET /api/me` palauttaa `xVasuSecuritySystemUser`-pohjaisen `UserProfileDto`:n |
 | ✅ | Teeman vaihto vaalea ↔ tumma toimii välittömästi, persistoituu localStorageen |
