@@ -1,7 +1,18 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
+
 import { WordmarkComponent } from '../../shared/wordmark/wordmark.component';
-import { AuthService } from '../../core/services/auth.service';
+import { UserApiService } from '../../core/services/user-api.service';
+import { greetingFor } from '../../core/services/greeting';
+import type { UserProfileDto } from '../../core/models/user-profile.dto';
 
 @Component({
   selector: 'app-home',
@@ -10,12 +21,12 @@ import { AuthService } from '../../core/services/auth.service';
     <main class="home">
       <header>
         <lumo-wordmark size="sm" [showProduct]="true" />
-        <span class="user">{{ displayName() }}</span>
+        <span class="user">{{ headerName() }}</span>
       </header>
 
       <section class="greeting">
-        <h1>Tervetuloa Lumo mVasuun</h1>
-        <p>Aihio-vaihe 9/14 — Entra ID -kirjautuminen toimii. Profiilin haku /api/me-endpointista lisätään vaiheessa 10.</p>
+        <h1>{{ greeting() }}, {{ greetingName() }}</h1>
+        <p>Aihio-vaihe 10/14 — profiili haetaan /api/me-endpointista, asetukset tallennetaan kantaan.</p>
       </section>
 
       <section class="cards">
@@ -45,10 +56,25 @@ import { AuthService } from '../../core/services/auth.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HomeComponent {
-  private readonly auth = inject(AuthService);
+  private readonly api = inject(UserApiService);
+  private readonly destroyRef = inject(DestroyRef);
 
-  readonly displayName = computed(() => {
-    const account = this.auth.account();
-    return account?.name ?? account?.username ?? '';
+  protected readonly profile = signal<UserProfileDto | null>(null);
+  protected readonly greeting = signal(greetingFor());
+
+  protected readonly headerName = computed(() => {
+    const p = this.profile();
+    return p?.preferredName?.trim() || p?.displayName || '';
   });
+
+  protected readonly greetingName = computed(() => this.headerName() || 'Lumolainen');
+
+  constructor() {
+    this.api.getProfile()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (p) => this.profile.set(p),
+        error: (err) => console.error('[Home] profile load failed', err),
+      });
+  }
 }
