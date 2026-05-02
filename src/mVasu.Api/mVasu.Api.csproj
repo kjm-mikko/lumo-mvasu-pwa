@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dd2dfec8-6595-4784-afb0-93d725ab5c03</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Identity.Web" Version="4.8.0" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.14.9" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.ApplicationInsights" Version="5.0.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="xVasu private feed (kjm-sk-ado) — pin all sub-packages to the same CI tag">
+    <PackageReference Include="xVasu.Module" Version="1.1.0-CI-1802" />
+  </ItemGroup>
+
+  <ItemGroup Label="Pin transitive packages past known vulnerabilities">
+    <!-- xVasu pulls older MailKit/MimeKit; pin past GHSA-9j88-vvj5-vhgr / GHSA-g7hc-96xr-gvvx -->
+    <PackageReference Include="MailKit" Version="4.16.0" />
+    <PackageReference Include="MimeKit" Version="4.16.0" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <ProjectReference Include="..\mVasu.Api.Contracts\mVasu.Api.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

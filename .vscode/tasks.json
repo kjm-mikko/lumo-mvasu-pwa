@@ -1,0 +1,101 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build:api",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/mVasu.Api/mVasu.Api.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "build:solution",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/Lumo.mVasu.slnx",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "watch:api",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "watch",
+        "run",
+        "--project",
+        "${workspaceFolder}/src/mVasu.Api/mVasu.Api.csproj"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "test:api",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "${workspaceFolder}/Lumo.mVasu.slnx"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "build:pwa",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "options": {
+        "cwd": "${workspaceFolder}/src/mVasu.Pwa"
+      },
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "watch:pwa",
+      "type": "shell",
+      "command": "npm",
+      "args": ["start"],
+      "options": {
+        "cwd": "${workspaceFolder}/src/mVasu.Pwa"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "test:pwa",
+      "type": "shell",
+      "command": "npm",
+      "args": ["test", "--", "--watch=false"],
+      "options": {
+        "cwd": "${workspaceFolder}/src/mVasu.Pwa"
+      },
+      "problemMatcher": [],
+      "group": "test"
+    },
+    {
+      "label": "test:all",
+      "dependsOrder": "sequence",
+      "dependsOn": ["test:api", "test:pwa"],
+      "problemMatcher": [],
+      "group": "test"
+    }
+  ]
+}

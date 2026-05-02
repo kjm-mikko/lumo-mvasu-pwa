@@ -1,0 +1,56 @@
+.login {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lumo-space-xl);
+  padding: var(--lumo-space-2xl) var(--lumo-space-lg);
+  background: var(--lumo-bg);
+  color: var(--lumo-text-primary);
+  text-align: center;
+}
+
+h1 {
+  font-family: var(--lumo-font-heading);
+  font-size: var(--lumo-fs-display);
+  margin: 0;
+}
+
+.subhead {
+  font-size: var(--lumo-fs-body);
+  color: var(--lumo-text-secondary);
+  max-width: 28ch;
+  margin: 0;
+}
+
+.cta {
+  background: var(--lumo-cta);
+  color: var(--lumo-text-on-cta);
+  border: none;
+  border-radius: var(--lumo-radius-lg);
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-medium);
+  font-size: var(--lumo-fs-body);
+  padding: var(--lumo-space-md) var(--lumo-space-xl);
+  min-height: 48px;
+  cursor: pointer;
+  transition: background var(--lumo-duration-fast) var(--lumo-easing);
+
+  &:hover:not([disabled]) { background: var(--lumo-cta-hover); }
+  &:active:not([disabled]) { background: var(--lumo-cta-active); }
+  &[disabled] { opacity: 0.6; cursor: not-allowed; }
+}
+
+.help {
+  color: var(--lumo-primary);
+  font-size: var(--lumo-fs-small);
+  text-decoration: none;
+  &:hover { text-decoration: underline; }
+}
+
+footer {
+  margin-top: auto;
+  color: var(--lumo-text-tertiary);
+  font-size: var(--lumo-fs-caption);
+}
