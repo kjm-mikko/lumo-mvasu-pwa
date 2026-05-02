@@ -40,3 +40,30 @@ Authorization: Bearer {{bearerToken}}
 }
 
 ###
+
+### Update location consent
+PUT {{mVasu.Api_HostAddress}}/api/me/location-consent
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer {{bearerToken}}
+
+{
+    "consent": true
+}
+
+###
+
+### Record latest location (requires consent === true)
+POST {{mVasu.Api_HostAddress}}/api/me/location
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer {{bearerToken}}
+
+{
+    "latitude": 60.1699,
+    "longitude": 24.9384,
+    "accuracy": 12.5,
+    "recordedAt": "2026-05-02T08:30:00Z"
+}
+
+###

@@ -170,6 +170,76 @@ app.MapPut("/api/me/settings", async (
     .WithSummary("Updates PreferredName, Theme and Language for the authenticated user.")
     .RequireAuthorization(AccessAsUserPolicy);
 
+app.MapPut("/api/me/location-consent", async (
+        UpdateLocationConsentDto dto,
+        ClaimsPrincipal user,
+        IUserSettingsService settings,
+        CancellationToken ct) =>
+    {
+        var profile = await settings.UpdateLocationConsentAsync(user, dto.Consent, ct);
+        return profile is null
+            ? Results.Problem(
+                title: "User not provisioned",
+                detail: "Authenticated principal could not be resolved to a Lumo mVasu user.",
+                statusCode: StatusCodes.Status403Forbidden)
+            : Results.Ok(profile);
+    })
+    .WithName("UpdateCurrentUserLocationConsent")
+    .WithSummary("Sets the user's consent flag for storing location data. Revoking clears the last known location.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapPost("/api/me/location", async (
+        UserLocationDto dto,
+        ClaimsPrincipal user,
+        IUserSettingsService settings,
+        TimeProvider clock,
+        CancellationToken ct) =>
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (dto.Latitude is < -90 or > 90 || double.IsNaN(dto.Latitude))
+        {
+            errors[nameof(dto.Latitude)] = ["Latitude must be between -90 and 90."];
+        }
+
+        if (dto.Longitude is < -180 or > 180 || double.IsNaN(dto.Longitude))
+        {
+            errors[nameof(dto.Longitude)] = ["Longitude must be between -180 and 180."];
+        }
+
+        if (dto.Accuracy is < 0 || (dto.Accuracy is { } a && double.IsNaN(a)))
+        {
+            errors[nameof(dto.Accuracy)] = ["Accuracy must be non-negative when provided."];
+        }
+
+        if (dto.RecordedAt > clock.GetUtcNow().AddMinutes(5))
+        {
+            errors[nameof(dto.RecordedAt)] = ["RecordedAt cannot be in the future."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.ValidationProblem(errors);
+        }
+
+        var result = await settings.RecordLocationAsync(user, dto, ct);
+        return result switch
+        {
+            RecordLocationResult.Recorded => Results.NoContent(),
+            RecordLocationResult.ConsentNotGranted => Results.Problem(
+                title: "Location consent not granted",
+                detail: "The user has not granted consent to store location data.",
+                statusCode: StatusCodes.Status403Forbidden),
+            _ => Results.Problem(
+                title: "User not provisioned",
+                detail: "Authenticated principal could not be resolved to a Lumo mVasu user.",
+                statusCode: StatusCodes.Status403Forbidden),
+        };
+    })
+    .WithName("RecordCurrentUserLocation")
+    .WithSummary("Stores the user's latest known location. Requires location consent to be granted.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
 try
 {
     Log.Information("Lumo mVasu API starting (version {Version})", version);

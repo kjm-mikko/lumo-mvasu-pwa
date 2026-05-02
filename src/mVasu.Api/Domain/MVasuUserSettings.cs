@@ -48,6 +48,30 @@ public class MVasuUserSettings : BaseObject
         set => SetPropertyValue(nameof(LocationConsent), value);
     }
 
+    public double? LastLocationLatitude
+    {
+        get => GetPropertyValue<double?>(nameof(LastLocationLatitude));
+        set => SetPropertyValue(nameof(LastLocationLatitude), value);
+    }
+
+    public double? LastLocationLongitude
+    {
+        get => GetPropertyValue<double?>(nameof(LastLocationLongitude));
+        set => SetPropertyValue(nameof(LastLocationLongitude), value);
+    }
+
+    public double? LastLocationAccuracyMeters
+    {
+        get => GetPropertyValue<double?>(nameof(LastLocationAccuracyMeters));
+        set => SetPropertyValue(nameof(LastLocationAccuracyMeters), value);
+    }
+
+    public DateTimeOffset? LastLocationRecordedAt
+    {
+        get => GetPropertyValue<DateTimeOffset?>(nameof(LastLocationRecordedAt));
+        set => SetPropertyValue(nameof(LastLocationRecordedAt), value);
+    }
+
     [Size(SizeAttribute.Unlimited)]
     public string? SettingsJson
     {

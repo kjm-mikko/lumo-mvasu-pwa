@@ -26,3 +26,4 @@ prefix.
 | Script | Phase | Purpose |
 | --- | --- | --- |
 | `001_create_mvasuusersettings.sql` | 5 | Creates `MVasuUserSettings` for per-user theme / language / preferredName / locationConsent settings |
+| `002_add_location_to_mvasuusersettings.sql` | 7 | Adds last-known-location columns (latitude, longitude, accuracy, recordedAt) |

@@ -136,5 +136,17 @@ public class SettingsEndpointTests : IClassFixture<AuthenticatedWebApplicationFa
             LastDto = dto;
             return Task.FromResult(Result);
         }
+
+        public Task<UserProfileDto?> UpdateLocationConsentAsync(
+            ClaimsPrincipal principal,
+            bool consent,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Result);
+
+        public Task<RecordLocationResult> RecordLocationAsync(
+            ClaimsPrincipal principal,
+            UserLocationDto location,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(RecordLocationResult.Recorded);
     }
 }

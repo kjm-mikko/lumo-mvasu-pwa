@@ -9,4 +9,21 @@ public interface IUserSettingsService
         ClaimsPrincipal principal,
         UpdateSettingsDto dto,
         CancellationToken cancellationToken = default);
+
+    Task<UserProfileDto?> UpdateLocationConsentAsync(
+        ClaimsPrincipal principal,
+        bool consent,
+        CancellationToken cancellationToken = default);
+
+    Task<RecordLocationResult> RecordLocationAsync(
+        ClaimsPrincipal principal,
+        UserLocationDto location,
+        CancellationToken cancellationToken = default);
+}
+
+public enum RecordLocationResult
+{
+    Recorded,
+    UserNotProvisioned,
+    ConsentNotGranted,
 }

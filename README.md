@@ -2,7 +2,7 @@
 
 Seuraavan sukupolven Lumo mVasu — DevExtreme Angular PWA + ASP.NET Core 10 Web API.
 
-> **Tila:** Aihio (skeleton). Vaihe 6/14 — `PUT /api/me/settings` päivittää MVasuUserSettings-rivin.
+> **Tila:** Aihio (skeleton). Vaihe 7/14 — sijaintipalvelujen backend (consent + tallennus) valmis.
 
 ---
 
@@ -169,7 +169,7 @@ Conventional Commits: `feat(api): ...`, `fix(pwa): ...`, `chore(deps): ...`.
 4. ✅ Backend: XPO + xVasu-moduuli, `/api/health/db` — *valmis*
 5. ✅ Backend: email-pohjainen käyttäjä-resolver, MVasuUserSettings, `/api/me` palauttaa XPO-tietoja — *valmis*
 6. ✅ Backend: `PUT /api/me/settings` päivittää käyttäjäkohtaiset asetukset — *valmis*
-7. Backend: `/api/me/location-consent`, `/api/me/location`
+7. ✅ Backend: `PUT /api/me/location-consent`, `POST /api/me/location` (sijaintipalvelut) — *valmis*
 8. Frontend: Angular + DevExtreme 25.2 + PWA + Lumo-tokenit
 9. Frontend: MSAL login flow
 10. Frontend: HTTP-interceptor + `/api/me`-kutsu
