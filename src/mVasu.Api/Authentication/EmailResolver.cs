@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using DevExpress.Data.Filtering;
+using xVasu.Data.Security;
 
 namespace mVasu.Api.Authentication;
 
@@ -57,5 +59,31 @@ public static class EmailResolver
         }
 
         return variants;
+    }
+
+    /// <summary>
+    /// Builds the XPO criteria that locates an active mVasu user by their
+    /// email variants. Replicates the legacy mVasu CustomAuthenticationProvider:
+    /// vvoad-prefix UserName match for Kojamo AD users, exact email match for
+    /// @kojamo.onmicrosoft.com guest tenants, mVasuEnabled and IsActive in both.
+    /// </summary>
+    public static CriteriaOperator BuildUserCriteria(IReadOnlyList<string> userEmailList, string email)
+    {
+        if (email.EndsWith("@kojamo.onmicrosoft.com", StringComparison.OrdinalIgnoreCase))
+        {
+#pragma warning disable CRR0050 // XPO CriteriaOperator.FromLambda requires == for SQL translation
+            return CriteriaOperator.FromLambda<xVasuSecuritySystemUser>(
+                u => userEmailList.Contains(u.Email.ToLower())
+                    && u.Email.ToLower() == email
+                    && u.mVasuEnabled
+                    && u.IsActive);
+#pragma warning restore CRR0050
+        }
+
+        return CriteriaOperator.FromLambda<xVasuSecuritySystemUser>(
+            u => userEmailList.Contains(u.Email.ToLower())
+                && u.UserName.ToLower().StartsWith("vvoad")
+                && u.mVasuEnabled
+                && u.IsActive);
     }
 }

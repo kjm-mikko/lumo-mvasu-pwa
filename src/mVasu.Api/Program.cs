@@ -52,6 +52,7 @@ builder.Services.AddAuthorization(options =>
 });
 
 builder.Services.AddScoped<IUserResolver, XpoEmailUserResolver>();
+builder.Services.AddScoped<IUserSettingsService, XpoUserSettingsService>();
 
 builder.Services.AddVasuXpo(builder.Configuration);
 
@@ -123,6 +124,50 @@ app.MapGet("/api/me", async (ClaimsPrincipal user, IUserResolver resolver, Cance
     })
     .WithName("GetCurrentUser")
     .WithSummary("Returns the authenticated user's mVasu profile.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+string[] validThemes = ["light", "dark", "system"];
+string[] validLanguages = ["fi", "en"];
+const int preferredNameMaxLength = 100;
+
+app.MapPut("/api/me/settings", async (
+        UpdateSettingsDto dto,
+        ClaimsPrincipal user,
+        IUserSettingsService settings,
+        CancellationToken ct) =>
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (string.IsNullOrWhiteSpace(dto.Theme) || !validThemes.Contains(dto.Theme))
+        {
+            errors[nameof(dto.Theme)] = [$"Theme must be one of: {string.Join(", ", validThemes)}."];
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.Language) || !validLanguages.Contains(dto.Language))
+        {
+            errors[nameof(dto.Language)] = [$"Language must be one of: {string.Join(", ", validLanguages)}."];
+        }
+
+        if (dto.PreferredName is { Length: > preferredNameMaxLength })
+        {
+            errors[nameof(dto.PreferredName)] = [$"PreferredName must be at most {preferredNameMaxLength} characters."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.ValidationProblem(errors);
+        }
+
+        var profile = await settings.UpdateAsync(user, dto, ct);
+        return profile is null
+            ? Results.Problem(
+                title: "User not provisioned",
+                detail: "Authenticated principal could not be resolved to a Lumo mVasu user.",
+                statusCode: StatusCodes.Status403Forbidden)
+            : Results.Ok(profile);
+    })
+    .WithName("UpdateCurrentUserSettings")
+    .WithSummary("Updates PreferredName, Theme and Language for the authenticated user.")
     .RequireAuthorization(AccessAsUserPolicy);
 
 try

@@ -26,3 +26,17 @@ Accept: application/json
 Authorization: Bearer {{bearerToken}}
 
 ###
+
+### Update user settings
+PUT {{mVasu.Api_HostAddress}}/api/me/settings
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer {{bearerToken}}
+
+{
+    "preferredName": "Mikko",
+    "theme": "dark",
+    "language": "fi"
+}
+
+###

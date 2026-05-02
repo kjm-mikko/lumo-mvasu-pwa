@@ -8,21 +8,24 @@ using xVasu.Data.Security;
 namespace mVasu.Api.Authentication;
 
 /// <summary>
-/// Resolves the authenticated principal to an mVasu user via XPO, replicating
-/// the criteria from the legacy mVasu CustomAuthenticationProvider:
-/// vvoad-prefix UserName match for Kojamo AD users, exact email match for
-/// @kojamo.onmicrosoft.com guest tenants, mVasuEnabled and IsActive in both cases.
+/// Persists per-user mVasu settings (PreferredName / Theme / Language) into
+/// the MVasuUserSettings table. Locates the xVasu user with the same criteria
+/// as <see cref="XpoEmailUserResolver"/>, then patches or creates the
+/// associated settings row in a single object space transaction.
 /// </summary>
-public sealed class XpoEmailUserResolver(
+public sealed class XpoUserSettingsService(
     IObjectSpaceProvider objectSpaceProvider,
-    ILogger<XpoEmailUserResolver> logger) : IUserResolver
+    ILogger<XpoUserSettingsService> logger) : IUserSettingsService
 {
-    public Task<UserProfileDto?> ResolveAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
+    public Task<UserProfileDto?> UpdateAsync(
+        ClaimsPrincipal principal,
+        UpdateSettingsDto dto,
+        CancellationToken cancellationToken = default)
     {
         var email = EmailResolver.ResolveEmail(principal);
         if (string.IsNullOrEmpty(email))
         {
-            logger.LogWarning("Authenticated principal had no resolvable email claim");
+            logger.LogWarning("Settings update rejected — principal had no resolvable email");
             return Task.FromResult<UserProfileDto?>(null);
         }
 
@@ -32,14 +35,24 @@ public sealed class XpoEmailUserResolver(
         var user = os.FindObject<xVasuSecuritySystemUser>(EmailResolver.BuildUserCriteria(variants, email));
         if (user is null)
         {
-            logger.LogInformation(
-                "User {Email} not found in xVasuSecuritySystemUser (variants tried: {Count})",
-                email, variants.Count);
+            logger.LogInformation("Settings update rejected — user {Email} not provisioned", email);
             return Task.FromResult<UserProfileDto?>(null);
         }
 
         var settings = os.FindObject<MVasuUserSettings>(
             CriteriaOperator.FromLambda<MVasuUserSettings>(s => s.User.Oid == user.Oid));
+
+        if (settings is null)
+        {
+            settings = os.CreateObject<MVasuUserSettings>();
+            settings.User = user;
+        }
+
+        settings.PreferredName = string.IsNullOrWhiteSpace(dto.PreferredName) ? null : dto.PreferredName.Trim();
+        settings.Theme = dto.Theme;
+        settings.Language = dto.Language;
+
+        os.CommitChanges();
 
         var displayName = principal.FindFirst("name")?.Value
             ?? user.Kokonimi
@@ -51,10 +64,10 @@ public sealed class XpoEmailUserResolver(
             Id: user.Oid,
             Email: user.Email ?? email,
             DisplayName: displayName,
-            PreferredName: settings?.PreferredName,
-            Theme: settings?.Theme ?? "light",
-            Language: settings?.Language ?? "fi",
-            LocationConsent: settings?.LocationConsent ?? false);
+            PreferredName: settings.PreferredName,
+            Theme: settings.Theme,
+            Language: settings.Language,
+            LocationConsent: settings.LocationConsent);
 
         return Task.FromResult<UserProfileDto?>(profile);
     }
