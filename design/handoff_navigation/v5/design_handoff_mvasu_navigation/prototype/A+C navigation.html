@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8"/>
+<title>mVasu · A+C navigation prototype</title>
+<meta name="viewport" content="width=1400"/>
+
+<!-- Google Fonts (open substitutes for Austin → Playfair Display, Graphik → Inter) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+
+<!-- Lumo design tokens (colors + type) -->
+<link rel="stylesheet" href="../tokens.css"/>
+<link rel="stylesheet" href="kit.css"/>
+<link rel="stylesheet" href="extra-kit.css"/>
+
+<style>
+  /* canvas page chrome */
+  body { background: #f0eee9; }
+  .page { padding: 56px 32px 96px; max-width: 1320px; margin: 0 auto; }
+  .page > header { margin-bottom: 40px; max-width: 720px; }
+  .eyebrow-page { font: 500 12px 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; margin: 0 0 8px; }
+  .page h1 { font: 600 36px 'Playfair Display', serif; color: #002663; margin: 0 0 12px; line-height: 1.15; }
+  .page header p { font: 400 15px 'Inter', sans-serif; line-height: 1.6; color: #475569; max-width: 60ch; margin: 0 0 6px; }
+  .page header p strong { color: #0f172a; font-weight: 500; }
+
+  .legend { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 20px; padding: 16px 20px; background: #fffaf2; border: 1px solid #f5e8c8; border-radius: 12px; }
+  .legend dt { font: 500 11px 'Inter', sans-serif; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+  .legend dd { font: 400 13px 'Inter', sans-serif; color: #0f172a; margin: 0; max-width: 28ch; }
+  .legend > div { display: flex; flex-direction: column; gap: 2px; }
+
+  /* design canvas overrides */
+  #canvas-root { min-height: 100vh; }
+</style>
+</head>
+<body>
+
+<div id="canvas-root"></div>
+
+<!-- React + Babel pinned -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="android-frame.jsx"></script>
+<script type="text/babel" src="screens.jsx"></script>
+<script type="text/babel" src="extra-screens.jsx"></script>
+
+<script type="text/babel">
+const { useState } = React;
+
+const Phone = ({ children }) => (
+  <AndroidDevice width={360} height={780}>{children}</AndroidDevice>
+);
+
+// Wrapper that renders a screen with optional bottom-sheet overlay
+const PhoneWith = ({ Screen, Sheet, ...props }) => {
+  const [sheetOpen, setSheetOpen] = useState(props.initialSheet || false);
+  const [route, setRoute] = useState(props.initialRoute || 'list');
+  return (
+    <Phone>
+      {route === 'list'
+        ? <Screen
+            onCardMenu={() => setSheetOpen(true)}
+            onOpenTask={() => setRoute('detail')}
+            onOpenApt={() => setRoute('detail')}
+            onTab={() => {}}
+          />
+        : props.Detail
+          ? <props.Detail onBack={() => setRoute('list')}/>
+          : null}
+      {sheetOpen && Sheet ? <Sheet onClose={() => setSheetOpen(false)}/> : null}
+    </Phone>
+  );
+};
+
+const App = () => (
+  <div className="page" data-screen-label="A+C navigation prototype">
+    <header>
+      <div className="eyebrow-page">mVasu · navigation direction</div>
+      <h1>A + C — välilehdet + tehtäväjono</h1>
+      <p>
+        Bottom-navigation (5 tabs): <strong>Tehtävät</strong> (käyttäjän omat Tehtävä-entiteetit) · <strong>Tiskilista</strong> (vapaat asunnot) · Asukkaat · Kohteet · Lisää.
+        Kortilta porautuminen avaa detail-näkymän; kebab-painike avaa bottom-sheetin jossa kortin kontekstitoiminnot.
+      </p>
+      <p>
+        Toiminnot ovat saatavilla <strong>kahdessa paikassa</strong>: nopeasti kortin kebab-valikosta (yleisimmät), kattavasti detail-näkymän pikatoiminnot-ruudukosta + alalaidan CTA-pareista.
+      </p>
+      <p>
+        <strong>Aloitusnäkymä on valittavissa</strong>: joko (A) <em>Koti — accordion + tiles</em> (lähinnä XAFin nykyistä vasenta valikkoa, mutta paneeleihin avautuvilla ruuduilla) tai (B) <em>Tehtävät</em> (käyttäjän omat tehtävät listana). Käyttäjä voi vaihtaa Lisää-välilehden asetuksista.
+      </p>
+      <dl className="legend">
+        <div><dt>Pohjat</dt><dd>colors_and_type.css (Lumo-tokenit), Material 3 Android-runko, DevExtreme Angular -komponentit</dd></div>
+        <div><dt>Tehtävät</dt><dd>Lähde: <code>Tehtävä</code>-entiteetti. Filterit: Omat / Liitetyt / Kaikki. Ryhmittely tilan mukaan.</dd></div>
+        <div><dt>Tiskilista</dt><dd>Lähde: <code>Asuinhuoneisto</code>, tila Vapaa. Toolbar: Remontti / Yleisesittely / Pikavaraus / Laske.</dd></div>
+      </dl>
+    </header>
+
+    <DesignCanvas storageKey="ac-nav-prototype">
+      <DCSection
+        id="primary"
+        title="Bottom tabs — päänäkymät"
+        subtitle="Tehtävät = käyttäjän omat · Tiskilista = vapaat asunnot"
+      >
+        <DCArtboard id="tasks" label="01 · Tehtävät (käyttäjän omat)" width={360} height={780}>
+          <Phone><TasksScreen onTab={() => {}}/></Phone>
+        </DCArtboard>
+        <DCArtboard id="tiskilista" label="02 · Tiskilista (vapaat asunnot)" width={360} height={780}>
+          <Phone><TiskilistaScreen onTab={() => {}}/></Phone>
+        </DCArtboard>
+        <DCArtboard id="people" label="03 · Asukkaat" width={360} height={780}>
+          <Phone><PeopleScreen onTab={() => {}}/></Phone>
+        </DCArtboard>
+        <DCArtboard id="more" label="04 · Lisää (XAF-moduulit)" width={360} height={780}>
+          <Phone><MoreScreen onTab={() => {}}/></Phone>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="alt-home"
+        title="Vaihtoehtoinen aloitusnäkymä"
+        subtitle="Accordion + tile-ruudukko (dx-accordion + tile grid). Käyttäjä voi valita aloitukseksi tämän tai Tehtävälistan."
+      >
+        <DCArtboard id="home-hub" label="A · Koti — accordion + tiles" width={360} height={780}>
+          <Phone><HomeHubScreen onTab={() => {}}/></Phone>
+        </DCArtboard>
+        <DCArtboard id="tasks-alt" label="B · Tehtävälista (vertailu)" width={360} height={780}>
+          <Phone><TasksScreen onTab={() => {}}/></Phone>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="details"
+        title="Detail-näkymät"
+        subtitle="Kortilta porautuminen"
+      >
+        <DCArtboard id="tehtava-detail" label="05 · Tehtävä-detail" width={360} height={780}>
+          <Phone><TehtavaDetailScreen onBack={() => {}}/></Phone>
+        </DCArtboard>
+        <DCArtboard id="tiski-detail" label="06 · Asunto-detail (Tiskilista)" width={360} height={780}>
+          <Phone><TiskiDetailScreen onBack={() => {}}/></Phone>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="xaf-views"
+        title="ASMA & KIRE -näkymät (Model.xafml-pohjaiset)"
+        subtitle="Liidit · Verkkokauppa · Saapuneet irtisanomiset · Tarjoukset · Allekirjoitettavat · Remontit · Henkilö-detail"
+      >
+        <DCArtboard id="liidit" label="09 · Liidit (ASMA)" width={360} height={780}>
+          <Phone><LiiditScreen onTab={() => {}} onBack={() => {}}/></Phone>
+        </DCArtboard>
+        <DCArtboard id="verkkokauppa" label="10 · Lumo Verkkokauppa" width={360} height={780}>
+          <Phone><VerkkokauppaScreen onTab={() => {}} onBack={() => {}}/></Phone>
+        </DCArtboard>
+        <DCArtboard id="irtisanomiset" label="11 · Saapuneet irtisanomiset" width={360} height={780}>
+          <Phone><IrtisanomisetScreen onTab={() => {}} onBack={() => {}}/></Phone>
+        </DCArtboard>
+        <DCArtboard id="tarjoukset" label="12 · Tarjoukset" width={360} height={780}>
+          <Phone><TarjouksetScreen onTab={() => {}} onBack={() => {}}/></Phone>
+        </DCArtboard>
+        <DCArtboard id="allekirjoitettavat" label="13 · Allekirjoitettavat" width={360} height={780}>
+          <Phone><AllekirjoitettavatScreen onTab={() => {}} onBack={() => {}}/></Phone>
+        </DCArtboard>
+        <DCArtboard id="remontit" label="14 · Remontit (KIRE)" width={360} height={780}>
+          <Phone><RemontitScreen onTab={() => {}} onBack={() => {}}/></Phone>
+        </DCArtboard>
+        <DCArtboard id="henkilo-detail" label="15 · Henkilö-detail" width={360} height={780}>
+          <Phone><HenkiloDetailScreen onBack={() => {}}/></Phone>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="context"
+        title="Kortin kontekstivalikko"
+        subtitle="Kebab → bottom-sheet · nopeat toiminnot ilman porautumista"
+      >
+        <DCArtboard id="tehtava-sheet" label="07 · Tehtävä-kortti · kebab-valikko" width={360} height={780}>
+          <Phone>
+            <TasksScreen onTab={() => {}}/>
+            <TehtavaContextSheet onClose={() => {}}/>
+          </Phone>
+        </DCArtboard>
+        <DCArtboard id="tiski-sheet" label="08 · Asuntokortti · kebab-valikko" width={360} height={780}>
+          <Phone>
+            <TiskilistaScreen onTab={() => {}}/>
+            <TiskiContextSheet onClose={() => {}}/>
+          </Phone>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  </div>
+);
+
+ReactDOM.createRoot(document.getElementById('canvas-root')).render(<App/>);
+</script>
+</body>
+</html>

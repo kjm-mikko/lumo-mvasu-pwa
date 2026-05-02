@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8"/>
+<title>mVasu · A+C navigation prototype</title>
+<meta name="viewport" content="width=1400"/>
+
+<!-- Google Fonts (open substitutes for Austin → Playfair Display, Graphik → Inter) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+
+<!-- Lumo design tokens (colors + type) -->
+<link rel="stylesheet" href="../tokens.css"/>
+<link rel="stylesheet" href="kit.css"/>
+
+<style>
+  /* canvas page chrome */
+  body { background: #f0eee9; }
+  .page { padding: 56px 32px 96px; max-width: 1320px; margin: 0 auto; }
+  .page > header { margin-bottom: 40px; max-width: 720px; }
+  .eyebrow-page { font: 500 12px 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; margin: 0 0 8px; }
+  .page h1 { font: 600 36px 'Playfair Display', serif; color: #002663; margin: 0 0 12px; line-height: 1.15; }
+  .page header p { font: 400 15px 'Inter', sans-serif; line-height: 1.6; color: #475569; max-width: 60ch; margin: 0 0 6px; }
+  .page header p strong { color: #0f172a; font-weight: 500; }
+
+  .legend { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 20px; padding: 16px 20px; background: #fffaf2; border: 1px solid #f5e8c8; border-radius: 12px; }
+  .legend dt { font: 500 11px 'Inter', sans-serif; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+  .legend dd { font: 400 13px 'Inter', sans-serif; color: #0f172a; margin: 0; max-width: 28ch; }
+  .legend > div { display: flex; flex-direction: column; gap: 2px; }
+
+  /* design canvas overrides */
+  #canvas-root { min-height: 100vh; }
+</style>
+</head>
+<body>
+
+<div id="canvas-root"></div>
+
+<!-- React + Babel pinned -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="android-frame.jsx"></script>
+<script type="text/babel" src="screens.jsx"></script>
+
+<script type="text/babel">
+const Phone = ({ children }) => (
+  <AndroidDevice width={360} height={780}>{children}</AndroidDevice>
+);
+
+const App = () => (
+  <div className="page" data-screen-label="A+C navigation prototype">
+    <header>
+      <div className="eyebrow-page">mVasu · navigation direction</div>
+      <h1>A + C — välilehdet + tehtäväjono</h1>
+      <p>
+        Bottom-navigation (mobile-first, 5 tabs), missä <strong>ensimmäinen välilehti on tehtäväjono</strong>:
+        ei moduulivalikkoa, vaan päivän työ päivämääräryhmissä — esittelyt, allekirjoitukset, saapuneet,
+        valokuvaukset, remontit. Loput välilehdet kattavat selaustarpeen <em>(Asukkaat, Kohteet, Sopimukset)</em>
+        ja kaiken muun haku ja Lisää-välilehti.
+      </p>
+      <p>
+        Yksi kortti = yksi <strong>tehtävätyyppi</strong>, ei yksi entiteetti. "Allekirjoitusta odottaa"
+        -kortti voi tarkoittaa Tarjousta tai Sopimusta — käyttäjälle ne ovat sama työ.
+      </p>
+      <dl className="legend">
+        <div><dt>Pohjat</dt><dd>colors_and_type.css (Lumo-tokenit), Material 3 Android-runko</dd></div>
+        <div><dt>Aksenttiväri</dt><dd>Kortin vasen reuna kertoo tyypin: navy = oletus, magenta = kiireellinen, teal = info, oranssi = vaatii hyväksynnän</dd></div>
+        <div><dt>Tila</dt><dd>Avoin: priorisointisäännöt, backend-kysely tehtäväjonolle, "klassinen" toggle siirtymäkaudelle</dd></div>
+      </dl>
+    </header>
+
+    <DesignCanvas storageKey="ac-nav-prototype">
+      <DCSection
+        id="primary"
+        title="Päänäkymät"
+        subtitle="Bottom tabs · ensimmäinen välilehti on tehtäväjono"
+      >
+        <DCArtboard id="tasks" label="01 · Tehtävät (etusivu)" width={360} height={780}>
+          <Phone><TasksScreen/></Phone>
+        </DCArtboard>
+        <DCArtboard id="people" label="02 · Asukkaat" width={360} height={780}>
+          <Phone><PeopleScreen/></Phone>
+        </DCArtboard>
+        <DCArtboard id="more" label="03 · Lisää (moduulit + asetukset)" width={360} height={780}>
+          <Phone><MoreScreen/></Phone>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="actions"
+        title="Toiminnot"
+        subtitle="Kortilta porautuminen ja ylätason haku"
+      >
+        <DCArtboard id="task-detail" label="04 · Tehtävän tarkka näkymä" width={360} height={780}>
+          <Phone><TaskDetailScreen/></Phone>
+        </DCArtboard>
+        <DCArtboard id="quick-search" label="05 · Pikahaku (Cmd+K-ekvivalentti)" width={360} height={780}>
+          <Phone><QuickSearchScreen/></Phone>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  </div>
+);
+
+ReactDOM.createRoot(document.getElementById('canvas-root')).render(<App/>);
+</script>
+</body>
+</html>
