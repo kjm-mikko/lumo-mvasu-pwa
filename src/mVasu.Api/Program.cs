@@ -51,7 +51,7 @@ builder.Services.AddAuthorization(options =>
     });
 });
 
-builder.Services.AddScoped<IUserResolver, StaticTestUserResolver>();
+builder.Services.AddScoped<IUserResolver, XpoEmailUserResolver>();
 
 builder.Services.AddVasuXpo(builder.Configuration);
 

@@ -229,6 +229,44 @@ Vaatiiko sisäinen mVasu omat tietosuoja- ja käyttöehto-linkkinsä, vai riitt�
 
 ---
 
+## OD-009 · Käyttäjäasetusten tallennusmuoto (kentät vs. JSON blob)
+
+**Status:** Päätetty (hybridi)
+**Päätetty:** 2026-05-02
+**Päättäjä:** Toteutusvaihe 5
+
+### Konteksti
+
+xVasun `xVasuSecuritySystemUser`-luokassa ei ole mVasun käyttäjäkohtaisia asetuskenttiä (`PreferredName`, `Theme`, `Language`, `LocationConsent`). Asetukset pitää tallentaa erillisenä luokkana, ja kysymys oli kuinka strukturoida niitä:
+
+1. **Erilliset tyypitetyt kentät** kullekin asetukselle
+2. **Yksi JSON blob -kenttä** joka sisältää kaikki asetukset
+3. **Hybridi**: tyypitetyt kentät known-tärkeille, JSON blob laajennuksia varten
+
+### Nykyinen valinta
+
+**Vaihtoehto 3 — hybridi** [`MVasuUserSettings`](../src/mVasu.Api/Domain/MVasuUserSettings.cs)-luokassa:
+
+- `PreferredName` (string?) — näkyy UI:ssa (greeting), helppo lukea/näyttää
+- `Theme` (string) — yksinkertainen enum-tyyli, default `"light"`
+- `Language` (string) — yksinkertainen enum-tyyli, default `"fi"`
+- `LocationConsent` (bool) — backend käyttää ehtona ennen sijainnin tallentamista, **on oltava queryable**
+- `SettingsJson` (string?, unlimited) — vapaaehtoinen blob tulevia asetuksia varten
+
+### Perustelut
+
+- `LocationConsent` käytetään palvelimen logiikassa (POST /api/me/location -filtterinä) → ehdoton että queryable, ei JSON-purkua per request
+- `Theme` ja `Language` näkyvät myös Vasu Blazor -puolen XAF-näkymissä (jos joku haluaa hallinnoida käyttäjäkohtaisesti) → tyypitetyt kentät rendautuvat XAF:ssa automaattisesti
+- `SettingsJson` jättää oven auki future-asetuksia varten ilman migraatiota: notification preferences, sarakeasetukset DataGridissa, recent searches, suosikit ulkopuolisille resursseille
+- Migraatio JSON:iin → erillisiin kenttiin myöhemmin on suoraviivaista jos joku asetus näyttää ansaitsevan oman sarakkeensa
+
+### Trigger uudelleenarviointiin
+
+- Kun `SettingsJson` kasvaa yli 2–3 ainutlaatuiseen "kenttään" → harkitse niiden nostamista omiin sarakkeisiin
+- Jos backend tarvitsee suorittaa hakuja jollain JSON-kentän arvolla → on aika nostaa kenttä erilliseksi
+
+---
+
 ## Päätösten lisäysohje
 
 Uusia päätöksiä lisätään seuraavalla sapluunalla:
