@@ -2,21 +2,30 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  computed,
   inject,
   signal,
 } from '@angular/core';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { firstValueFrom } from 'rxjs';
 
 import { ThemeService, type LumoTheme } from '../../core/services/theme.service';
 import { AuthService } from '../../core/services/auth.service';
 import { UserApiService } from '../../core/services/user-api.service';
+import { LocationService, type LocationPermission } from '../../core/services/location.service';
 import type { UserProfileDto } from '../../core/models/user-profile.dto';
 import { AvatarComponent } from '../../shared/avatar/avatar.component';
 
 interface SettingsForm {
   preferredName: FormControl<string>;
   language: FormControl<string>;
+}
+
+interface LocationStatusView {
+  readonly text: string;
+  readonly tone: 'granted' | 'denied' | 'unsupported' | 'neutral';
+  readonly hint?: string;
 }
 
 @Component({
@@ -60,19 +69,24 @@ interface SettingsForm {
               <input
                 type="checkbox"
                 [checked]="p.locationConsent"
-                [disabled]="locationBusy()"
+                [disabled]="locationBusy() || locationStatus().tone === 'unsupported'"
                 (change)="onConsentChange($event)"
               />
               <span>Salli sijainnin käyttö</span>
             </label>
             <p
               class="status-line"
-              [class.status-line--granted]="p.locationConsent"
+              [class.status-line--granted]="locationStatus().tone === 'granted'"
+              [class.status-line--denied]="locationStatus().tone === 'denied'"
+              [class.status-line--unsupported]="locationStatus().tone === 'unsupported'"
               aria-live="polite"
             >
               <span class="dot" aria-hidden="true"></span>
-              {{ p.locationConsent ? 'Sallittu' : 'Ei pyydetty' }}
+              {{ locationStatus().text }}
             </p>
+            @if (locationStatus().hint; as hint) {
+              <p class="hint">{{ hint }}</p>
+            }
             <p class="helper">
               mVasu käyttää sijaintiasi näyttääkseen lähimmät kohteet ja ohjatakseen kartalla.
               Tietoa ei jaeta kolmansille osapuolille. Voit muuttaa lupaa milloin tahansa.
@@ -126,12 +140,19 @@ export class SettingsComponent {
   private readonly api = inject(UserApiService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly location = inject(LocationService);
 
   protected readonly profile = signal<UserProfileDto | null>(null);
   protected readonly saving = signal(false);
   protected readonly locationBusy = signal(false);
   protected readonly loadError = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+
+  protected readonly locationStatus = computed<LocationStatusView>(() => {
+    const consent = this.profile()?.locationConsent ?? false;
+    const permission = this.location.permissionState();
+    return mapLocationStatus(consent, permission);
+  });
 
   protected readonly themeOptions: ReadonlyArray<{ value: LumoTheme; label: string }> = [
     { value: 'light', label: 'Vaalea' },
@@ -189,26 +210,49 @@ export class SettingsComponent {
     this.errorMessage.set(null);
   }
 
-  protected onConsentChange(event: Event): void {
+  protected async onConsentChange(event: Event): Promise<void> {
     const target = event.target as HTMLInputElement;
     const consent = target.checked;
     this.locationBusy.set(true);
     this.errorMessage.set(null);
 
-    this.api.updateLocationConsent(consent)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (p) => {
-          this.applyProfile(p);
-          this.locationBusy.set(false);
-        },
-        error: (err) => {
-          console.error('[Settings] consent toggle failed', err);
-          target.checked = !consent;
-          this.errorMessage.set('Sijaintiluvan tallentaminen epäonnistui.');
-          this.locationBusy.set(false);
-        },
-      });
+    try {
+      // Persist the consent flag first — server is the source of truth.
+      const updated = await firstValueFrom(this.api.updateLocationConsent(consent));
+      this.applyProfile(updated);
+
+      if (consent) {
+        // Trigger the browser permission prompt and, on success, push the
+        // first reading to the API so the dev DB sees real coordinates.
+        await this.captureLocation();
+      }
+    } catch (err) {
+      console.error('[Settings] consent toggle failed', err);
+      target.checked = !consent;
+      this.errorMessage.set('Sijaintiluvan tallentaminen epäonnistui.');
+    } finally {
+      this.locationBusy.set(false);
+    }
+  }
+
+  private async captureLocation(): Promise<void> {
+    try {
+      const pos = await this.location.getCurrent();
+      await firstValueFrom(this.api.recordLocation({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracy: pos.coords.accuracy ?? null,
+        recordedAt: new Date(pos.timestamp).toISOString(),
+      }));
+    } catch (err) {
+      const code = (err as GeolocationPositionError | undefined)?.code;
+      // PERMISSION_DENIED (1) is reflected via the permission signal; no
+      // dedicated error message needed — the status line already updates.
+      if (code !== 1) {
+        console.warn('[Settings] location capture failed', err);
+        this.errorMessage.set('Sijainnin haku epäonnistui. Voit yrittää uudestaan myöhemmin.');
+      }
+    }
   }
 
   logout(): void {
@@ -229,4 +273,21 @@ export class SettingsComponent {
       }
     }
   }
+}
+
+function mapLocationStatus(consent: boolean, permission: LocationPermission): LocationStatusView {
+  if (permission === 'unsupported') {
+    return { text: 'Selain ei tue sijaintipalvelua', tone: 'unsupported' };
+  }
+  if (permission === 'denied') {
+    return {
+      text: 'Estetty selaimessa',
+      tone: 'denied',
+      hint: 'Avaa selaimen sijaintiasetukset salliaksesi sijainnin käytön tällä sivustolla.',
+    };
+  }
+  if (consent && permission === 'granted') {
+    return { text: 'Sallittu', tone: 'granted' };
+  }
+  return { text: 'Ei pyydetty', tone: 'neutral' };
 }

@@ -2,7 +2,7 @@
 
 Seuraavan sukupolven Lumo mVasu — DevExtreme Angular PWA + ASP.NET Core 10 Web API.
 
-> **Tila:** Aihio (skeleton). Vaihe 12/14 — Asetukset-sivun viimeistely (avatar + sijaintipalvelujen tilanäkymä).
+> **Tila:** Aihio (skeleton). Vaihe 13/14 — LocationService + sijainnin selainluvan kytkentä Asetuksissa.
 
 ---
 
@@ -200,7 +200,7 @@ Conventional Commits: `feat(api): ...`, `fix(pwa): ...`, `chore(deps): ...`.
 10. ✅ Frontend: `/api/me`-kutsu, settings-lomake, sijaintilupa-toggle — *valmis*
 11. ✅ Frontend: MainLayout (mobile bottom tab + desktop sidebar), Home "Saatavilla nyt" / "Tulossa" -osiot — *valmis*
 12. ✅ Frontend: Asetukset-sivu (avatar, profiilikortti, sijaintipalvelujen tilanäkymä) — *valmis*
-13. Frontend: LocationService + sijaintipalvelut-osio
+13. ✅ Frontend: LocationService + selainlupa-flow + POST /api/me/location toggle:n päällä — *valmis*
 14. README + docs päivitetty kokonaisuudessaan
 
 ---
