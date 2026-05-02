@@ -33,6 +33,14 @@ public static class XpoServiceCollectionExtensions
 
             application.CreateCustomObjectSpaceProvider += (_, e) =>
             {
+                // SchemaAlreadyExists is the right "never touch DDL" choice here.
+                // AutoCreateOption.None looks safer but actually validates the
+                // schema at first query and throws SchemaCorrectionNeededException
+                // when any xVasu table is missing — and we register every xVasu
+                // persistent type into AdditionalExportedTypes via assembly scan,
+                // so any gap in the dev database (e.g. MaksuLajiRyhma) crashes
+                // the resolver. SchemaAlreadyExists skips validation and reads
+                // tables on demand, never emitting DDL.
                 e.ObjectSpaceProvider = new XPObjectSpaceProvider(
                     new MutableSchemaDataStoreProvider(
                         connectionString,
@@ -41,7 +49,29 @@ public static class XpoServiceCollectionExtensions
                     useSeparateDataLayers: false);
             };
 
-            application.Setup();
+            try
+            {
+                application.Setup();
+            }
+            catch (NullReferenceException)
+            {
+                // XAF's Setup() builds an ApplicationModel that includes
+                // navigation items, views and other UI concepts. A headless
+                // Web API host has no UI, so the model-building step throws
+                // NRE in ModelNavigationItemsDomainLogic. By the time we hit
+                // that step the work we actually need has already happened:
+                // modules loaded, AdditionalExportedTypes registered into
+                // XafTypesInfo, and the ObjectSpaceProvider wired through
+                // CreateCustomObjectSpaceProvider. We swallow the NRE so DI
+                // gets a usable application instance — but only if the
+                // ObjectSpaceProvider really did get assigned, otherwise the
+                // failure is something else and we re-throw.
+                if (application.ObjectSpaceProvider is null)
+                {
+                    throw;
+                }
+            }
+
             return application;
         });
 
