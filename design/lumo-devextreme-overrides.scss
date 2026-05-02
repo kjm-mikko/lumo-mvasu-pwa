@@ -289,6 +289,133 @@
 
 
 // -----------------------------------------------------------------------------
+// Task queue — dx-list (.lumo-task-list) + lumo-task-card
+// Spec: design/handoff_navigation/v4/.../SCREENS.md §01 Tehtävät
+// -----------------------------------------------------------------------------
+.lumo-task-list.dx-list {
+  background: transparent;
+  border: 0;
+  padding: var(--lumo-space-md) var(--lumo-space-lg) var(--lumo-space-2xl);
+
+  .dx-empty-message { display: none; }
+
+  .dx-list-group {
+    border: 0;
+    background: transparent;
+  }
+
+  .dx-list-group-header {
+    background: var(--lumo-bg);
+    border: 0;
+    padding: 0;
+    position: sticky;
+    top: 64px;                  // sit under sticky topbar
+    z-index: calc(var(--lumo-z-sticky) - 1);
+  }
+
+  .dx-list-group-body {
+    padding: 0;
+    background: transparent;
+  }
+
+  .dx-list-item {
+    background: transparent;
+    border: 0;
+    padding: 0 0 10px;
+    cursor: pointer;
+
+    &::before, &::after { display: none; }
+
+    &.dx-state-hover, &.dx-state-focused {
+      background: transparent;
+    }
+
+    .dx-list-item-content {
+      padding: 0;
+    }
+  }
+}
+
+.lumo-day-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--lumo-space-sm);
+  padding: var(--lumo-space-sm) 0;
+  background: var(--lumo-bg);
+
+  .day {
+    font-family: var(--lumo-font-heading);
+    font-weight: var(--lumo-fw-semibold);
+    font-size: 14px;
+    color: var(--lumo-primary);
+  }
+  .date {
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-regular);
+    font-size: var(--lumo-fs-small);
+    color: var(--lumo-text-secondary);
+  }
+  .count {
+    margin-left: auto;
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: var(--lumo-fs-caption);
+    color: var(--lumo-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+}
+
+.lumo-task-card {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: var(--lumo-space-md);
+  padding: 14px;
+  background: var(--lumo-surface-elevated);
+  border: 1px solid var(--lumo-border);
+  border-left: 3px solid var(--lumo-primary);
+  border-radius: var(--lumo-radius-xl);
+  box-shadow: var(--lumo-shadow-sm);
+  transition: transform var(--lumo-duration-fast) var(--lumo-easing),
+              box-shadow var(--lumo-duration-fast) var(--lumo-easing);
+
+  &[data-accent='cta']  { border-left-color: var(--lumo-cta); }
+  &[data-accent='info'] { border-left-color: var(--lumo-info); }
+  &[data-accent='warn'] { border-left-color: var(--lumo-warning); }
+  &[data-accent='navy'] { border-left-color: var(--lumo-primary); }
+
+  &--urgent { background: var(--lumo-cta-subtle); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lumo-task-card { transition-duration: 0.01ms; }
+}
+
+// dx-button as inline action button — keep size compact (Lumo card spec ≥32px),
+// override the global mobile 48px floor that the buttons section sets above.
+.lumo-task-card .action-btn.dx-button {
+  min-height: 32px;
+
+  .dx-button-content { padding: 6px var(--lumo-space-md); }
+  .dx-button-text {
+    font-size: var(--lumo-fs-small);
+    font-weight: var(--lumo-fw-medium);
+  }
+}
+
+// dx-drop-down-button styled as a kebab — tight square, no chevron arrow
+.lumo-task-card .kebab.dx-dropdownbutton {
+  .dx-button {
+    min-width: 32px;
+    min-height: 32px;
+    border-radius: var(--lumo-radius-full);
+  }
+  .dx-button-content { padding: 4px; }
+  .dx-icon-overflow { font-size: 18px; color: var(--lumo-text-secondary); }
+}
+
+
+// -----------------------------------------------------------------------------
 // Mobile — touch target adjustments
 // -----------------------------------------------------------------------------
 @media (max-width: 600px) {

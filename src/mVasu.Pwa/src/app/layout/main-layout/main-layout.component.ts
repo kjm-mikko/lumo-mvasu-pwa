@@ -8,7 +8,7 @@ interface NavItem {
   readonly label: string;
   readonly route?: string;
   readonly disabled: boolean;
-  readonly icon: 'home' | 'users' | 'contract' | 'gear';
+  readonly icon: 'tasks' | 'list' | 'users' | 'more';
 }
 
 @Component({
@@ -86,9 +86,15 @@ interface NavItem {
         aria-hidden="true"
       >
         @switch (icon) {
-          @case ('home') {
-            <path d="M3 12 12 3l9 9" />
-            <path d="M5 10v10h4v-6h6v6h4V10" />
+          @case ('tasks') {
+            <path d="M9 11l3 3 7-7" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          }
+          @case ('list') {
+            <path d="M8 6h13M8 12h13M8 18h13" />
+            <circle cx="3.5" cy="6"  r="1" fill="currentColor" />
+            <circle cx="3.5" cy="12" r="1" fill="currentColor" />
+            <circle cx="3.5" cy="18" r="1" fill="currentColor" />
           }
           @case ('users') {
             <circle cx="9" cy="8" r="3.5" />
@@ -96,14 +102,10 @@ interface NavItem {
             <path d="M3 20c0-3 3-5 6-5s6 2 6 5" />
             <path d="M15 17c.5-1.8 2.4-3 4.5-3 1.2 0 2.5.5 2.5 3" />
           }
-          @case ('contract') {
-            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-            <path d="M14 3v5h5" />
-            <path d="M9 13h6M9 17h6" />
-          }
-          @case ('gear') {
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8" />
+          @case ('more') {
+            <circle cx="5"  cy="12" r="1.5" fill="currentColor" />
+            <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+            <circle cx="19" cy="12" r="1.5" fill="currentColor" />
           }
         }
       </svg>
@@ -114,9 +116,9 @@ interface NavItem {
 })
 export class MainLayoutComponent {
   protected readonly navItems: ReadonlyArray<NavItem> = [
-    { label: 'Etusivu', route: '/home', disabled: false, icon: 'home' },
-    { label: 'Asiakkaat', disabled: true, icon: 'users' },
-    { label: 'Sopimukset', disabled: true, icon: 'contract' },
-    { label: 'Asetukset', route: '/settings', disabled: false, icon: 'gear' },
+    { label: 'Tehtävät',  route: '/tasks',    disabled: false, icon: 'tasks' },
+    { label: 'Tiskilista',                    disabled: true,  icon: 'list' },
+    { label: 'Asukkaat',                      disabled: true,  icon: 'users' },
+    { label: 'Lisää',     route: '/settings', disabled: false, icon: 'more' },
   ];
 }

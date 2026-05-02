@@ -5,7 +5,7 @@ export const routes: Routes = [
   {
     path: '',
     pathMatch: 'full',
-    redirectTo: 'home',
+    redirectTo: 'tasks',
   },
   {
     path: 'auth/login',
@@ -24,9 +24,9 @@ export const routes: Routes = [
       import('./layout/main-layout/main-layout.component').then(m => m.MainLayoutComponent),
     children: [
       {
-        path: 'home',
+        path: 'tasks',
         loadComponent: () =>
-          import('./features/home/home.component').then(m => m.HomeComponent),
+          import('./features/tasks/tasks-tab.component').then(m => m.TasksTabComponent),
       },
       {
         path: 'settings',
@@ -37,6 +37,6 @@ export const routes: Routes = [
   },
   {
     path: '**',
-    redirectTo: 'home',
+    redirectTo: 'tasks',
   },
 ];
