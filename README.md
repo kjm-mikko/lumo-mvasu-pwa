@@ -213,6 +213,10 @@ Conventional Commits: `feat(api): ...`, `fix(pwa): ...`, `chore(deps): ...`.
 13. ✅ Frontend: LocationService + selainlupa-flow + POST /api/me/location toggle:n päällä — *valmis*
 14. ✅ README + docs (`docs/architecture.md`, `docs/local-development.md`, `docs/entra-id-setup.md`) — *valmis*
 
+### Domain-vaiheet (aihion päälle)
+
+D1. ✅ **Tiskilista** — `/api/tiskilista` + `/api/tiskilista/{id}` + PWA list & detail (kortti-grid, tekstihaku, scope/tila-suodatus, etäisyyslajittelu, RouteReuseStrategy, Navigoi kartalla). Frontend-Karma-testit jätetty seuraavaan iteraatioon (vaatii MSAL-mockit).
+
 ---
 
 ## Hyväksymiskriteerit
