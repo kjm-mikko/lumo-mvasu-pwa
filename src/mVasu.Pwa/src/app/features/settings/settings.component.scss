@@ -54,18 +54,62 @@ h2 {
 }
 
 .profile {
-  dl {
-    display: grid;
-    grid-template-columns: max-content 1fr;
-    gap: var(--lumo-space-xs) var(--lumo-space-md);
-    margin: 0;
-  }
-  dt {
-    color: var(--lumo-text-tertiary);
-    font-size: var(--lumo-fs-small);
-  }
-  dd {
-    margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-md);
+  padding: var(--lumo-space-md);
+  border: 1px solid var(--lumo-border);
+  border-radius: var(--lumo-radius-xl);
+  background: var(--lumo-surface-elevated);
+}
+
+.profile-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.profile-name {
+  margin: 0;
+  font-weight: var(--lumo-fw-medium);
+  font-size: var(--lumo-fs-h3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-email {
+  margin: 0;
+  color: var(--lumo-text-secondary);
+  font-size: var(--lumo-fs-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-line {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lumo-space-sm);
+  margin: var(--lumo-space-sm) 0 0;
+  font-size: var(--lumo-fs-small);
+  color: var(--lumo-text-tertiary);
+}
+
+.status-line .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--lumo-radius-full);
+  background: var(--lumo-text-tertiary);
+  flex: 0 0 auto;
+}
+
+.status-line--granted {
+  color: var(--lumo-success);
+
+  .dot {
+    background: var(--lumo-success);
   }
 }
 

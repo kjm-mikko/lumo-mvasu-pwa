@@ -12,6 +12,7 @@ import { ThemeService, type LumoTheme } from '../../core/services/theme.service'
 import { AuthService } from '../../core/services/auth.service';
 import { UserApiService } from '../../core/services/user-api.service';
 import type { UserProfileDto } from '../../core/models/user-profile.dto';
+import { AvatarComponent } from '../../shared/avatar/avatar.component';
 
 interface SettingsForm {
   preferredName: FormControl<string>;
@@ -20,20 +21,18 @@ interface SettingsForm {
 
 @Component({
   selector: 'app-settings',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, AvatarComponent],
   template: `
     <main class="settings">
       <h1>Asetukset</h1>
 
       @if (profile(); as p) {
         <section class="profile">
-          <h2>Profiili</h2>
-          <dl>
-            <dt>Nimi</dt>
-            <dd>{{ p.displayName }}</dd>
-            <dt>Sähköposti</dt>
-            <dd>{{ p.email }}</dd>
-          </dl>
+          <lumo-avatar [name]="p.displayName" size="lg" />
+          <div class="profile-fields">
+            <p class="profile-name">{{ p.displayName }}</p>
+            <p class="profile-email">{{ p.email }}</p>
+          </div>
         </section>
 
         <form [formGroup]="form" (ngSubmit)="save()" class="form">
@@ -66,6 +65,14 @@ interface SettingsForm {
               />
               <span>Salli sijainnin käyttö</span>
             </label>
+            <p
+              class="status-line"
+              [class.status-line--granted]="p.locationConsent"
+              aria-live="polite"
+            >
+              <span class="dot" aria-hidden="true"></span>
+              {{ p.locationConsent ? 'Sallittu' : 'Ei pyydetty' }}
+            </p>
             <p class="helper">
               mVasu käyttää sijaintiasi näyttääkseen lähimmät kohteet ja ohjatakseen kartalla.
               Tietoa ei jaeta kolmansille osapuolille. Voit muuttaa lupaa milloin tahansa.
