@@ -5,6 +5,7 @@ using Microsoft.Identity.Web;
 using mVasu.Api.Authentication;
 using mVasu.Api.Contracts;
 using mVasu.Api.Data;
+using mVasu.Api.Tiskilista;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
@@ -53,6 +54,7 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddScoped<IUserResolver, XpoEmailUserResolver>();
 builder.Services.AddScoped<IUserSettingsService, XpoUserSettingsService>();
+builder.Services.AddScoped<ITiskilistaQueryService, TiskilistaQueryService>();
 
 builder.Services.AddVasuXpo(builder.Configuration);
 
@@ -238,6 +240,87 @@ app.MapPost("/api/me/location", async (
     })
     .WithName("RecordCurrentUserLocation")
     .WithSummary("Stores the user's latest known location. Requires location consent to be granted.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/tiskilista", async (
+        ClaimsPrincipal user,
+        ITiskilistaQueryService service,
+        string? q,
+        string? status,
+        string scope,
+        string sortBy,
+        double? userLat,
+        double? userLon,
+        int? page,
+        int? pageSize,
+        CancellationToken ct) =>
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        var resolvedScope = string.IsNullOrWhiteSpace(scope) ? "omat" : scope;
+        if (!TiskilistaListQuery.ValidScopes.Contains(resolvedScope))
+        {
+            errors[nameof(scope)] = [$"scope must be one of: {string.Join(", ", TiskilistaListQuery.ValidScopes)}."];
+        }
+
+        var resolvedSort = string.IsNullOrWhiteSpace(sortBy) ? "vapautuu" : sortBy;
+        if (!TiskilistaListQuery.ValidSortBy.Contains(resolvedSort))
+        {
+            errors[nameof(sortBy)] = [$"sortBy must be one of: {string.Join(", ", TiskilistaListQuery.ValidSortBy)}."];
+        }
+
+        var resolvedPage = page ?? 1;
+        if (resolvedPage < 1)
+        {
+            errors[nameof(page)] = ["page must be >= 1."];
+        }
+
+        var resolvedPageSize = pageSize ?? 20;
+        if (resolvedPageSize < TiskilistaListQuery.MinPageSize || resolvedPageSize > TiskilistaListQuery.MaxPageSize)
+        {
+            errors[nameof(pageSize)] = [$"pageSize must be between {TiskilistaListQuery.MinPageSize} and {TiskilistaListQuery.MaxPageSize}."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.ValidationProblem(errors);
+        }
+
+        var query = new TiskilistaListQuery(
+            Search: q,
+            Status: status,
+            Scope: resolvedScope,
+            SortBy: resolvedSort,
+            UserLat: userLat,
+            UserLon: userLon,
+            Page: resolvedPage,
+            PageSize: resolvedPageSize);
+
+        var result = await service.ListAsync(user, query, ct);
+        return result is null
+            ? Results.Problem(
+                title: "User not provisioned",
+                detail: "Authenticated principal could not be resolved to a Lumo mVasu user.",
+                statusCode: StatusCodes.Status403Forbidden)
+            : Results.Ok(result);
+    })
+    .WithName("GetTiskilista")
+    .WithSummary("Lists Tiskilista entries filtered by scope, status and free text. Optional distance sort uses userLat/userLon.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/tiskilista/{id:guid}", async (
+        Guid id,
+        ClaimsPrincipal user,
+        ITiskilistaQueryService service,
+        CancellationToken ct) =>
+    {
+        var detail = await service.GetAsync(user, id, ct);
+        return detail is null
+            ? Results.NotFound()
+            : Results.Ok(detail);
+    })
+    .WithName("GetTiskilistaById")
+    .WithSummary("Returns the full Tiskilista detail by Oid.")
     .RequireAuthorization(AccessAsUserPolicy);
 
 try
