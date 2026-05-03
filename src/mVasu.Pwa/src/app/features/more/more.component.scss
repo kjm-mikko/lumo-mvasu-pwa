@@ -1,0 +1,155 @@
+// Most DevExtreme-targeted overrides (.lumo-more-list, .lumo-me-card)
+// live in design/lumo-devextreme-overrides.scss. This file holds the
+// page-level layout for the More tab.
+
+:host {
+  display: block;
+  background: var(--lumo-bg);
+  color: var(--lumo-text-primary);
+  min-height: 100%;
+}
+
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-lg);
+  padding: var(--lumo-space-lg);
+  padding-bottom: calc(64px + env(safe-area-inset-bottom) + var(--lumo-space-2xl));
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.topbar {
+  padding: var(--lumo-space-sm) 0 0;
+}
+
+.title {
+  font-family: var(--lumo-font-heading);
+  font-weight: var(--lumo-fw-semibold);
+  font-size: 22px;
+  color: var(--lumo-text-primary);
+  margin: 0;
+}
+
+.me-card {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-md);
+  padding: var(--lumo-space-md);
+  border-radius: var(--lumo-radius-xl);
+  background: var(--lumo-primary);
+  color: var(--lumo-text-on-primary);
+  box-shadow: var(--lumo-shadow-md);
+
+  .avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--lumo-radius-full);
+    background: rgba(255, 255, 255, 0.2);
+    color: var(--lumo-text-on-primary);
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: var(--lumo-fs-body);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+
+  .info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .name {
+    font-family: var(--lumo-font-heading);
+    font-weight: var(--lumo-fw-semibold);
+    font-size: var(--lumo-fs-h3);
+    color: var(--lumo-text-on-primary);
+  }
+
+  .meta {
+    font-family: var(--lumo-font-body);
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  &--error {
+    background: var(--lumo-danger-subtle);
+    color: var(--lumo-danger);
+
+    .avatar {
+      background: rgba(163, 45, 45, 0.15);
+      color: var(--lumo-danger);
+    }
+    .name { color: var(--lumo-danger); }
+    .meta { color: var(--lumo-text-secondary); }
+  }
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-sm);
+}
+
+.ds-eyebrow {
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-medium);
+  font-size: var(--lumo-fs-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lumo-text-tertiary);
+  margin: 0 var(--lumo-space-sm);
+}
+
+// `.more-row` and its inner `row-*` classes are styled in
+// design/lumo-devextreme-overrides.scss because they live inside
+// dx-list's *dxTemplate, which bypasses Angular's emulated CSS
+// encapsulation. Putting the rules here would be silently ignored
+// and DevExtreme's bright Material default styling would win.
+
+.logout {
+  align-self: stretch;
+  margin-top: var(--lumo-space-md);
+}
+
+.version {
+  text-align: center;
+  font-family: var(--lumo-font-body);
+  font-size: var(--lumo-fs-caption);
+  color: var(--lumo-text-tertiary);
+  margin: var(--lumo-space-md) 0 0;
+}
+
+.picker-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.picker-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px var(--lumo-space-md);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--lumo-radius-md);
+  font-family: var(--lumo-font-body);
+  font-size: var(--lumo-fs-body);
+  color: var(--lumo-text-primary);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+
+  &:hover { background: var(--lumo-primary-subtle); }
+
+  &--active {
+    border-color: var(--lumo-primary);
+    background: var(--lumo-primary-subtle);
+    color: var(--lumo-primary);
+  }
+}

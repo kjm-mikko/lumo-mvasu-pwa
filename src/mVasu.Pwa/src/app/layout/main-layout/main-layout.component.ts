@@ -119,6 +119,6 @@ export class MainLayoutComponent {
     { label: 'Tehtävät',  route: '/tasks',    disabled: false, icon: 'tasks' },
     { label: 'Tiskilista',                    disabled: true,  icon: 'list' },
     { label: 'Asukkaat',                      disabled: true,  icon: 'users' },
-    { label: 'Lisää',     route: '/settings', disabled: false, icon: 'more' },
+    { label: 'Lisää',     route: '/more',     disabled: false, icon: 'more' },
   ];
 }

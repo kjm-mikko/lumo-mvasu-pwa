@@ -408,6 +408,91 @@
   }
 }
 
+// More tab — XAF module groups (ASMA / KIRE) + app settings list-groups.
+// Spec: design/handoff_navigation/v5/.../SCREENS.md §03, NAVIGATION.md §4b.
+//
+// Row-template styles (.more-row and its children) live here, NOT in
+// more.component.scss, because dx-list's *dxTemplate renders content
+// through DevExtreme's own mechanism that bypasses Angular's emulated
+// encapsulation attributes — a component-scoped rule like `.row-count`
+// would not apply, and DevExtreme's bright Material-blue default badge
+// would win.
+.lumo-more-list.dx-list {
+  background: var(--lumo-surface-elevated);
+  border: 1px solid var(--lumo-border);
+  border-radius: var(--lumo-radius-xl);
+  overflow: hidden;
+
+  .dx-empty-message { display: none; }
+
+  .dx-list-item {
+    border-bottom: 1px solid var(--lumo-border);
+    cursor: pointer;
+
+    &:last-child { border-bottom: 0; }
+
+    .dx-list-item-content { padding: 0; }
+
+    &.dx-state-hover { background: var(--lumo-primary-subtle); }
+    &.dx-state-focused { background: var(--lumo-primary-subtle); }
+  }
+
+  .more-row {
+    display: flex;
+    align-items: center;
+    gap: var(--lumo-space-md);
+    padding: 12px 14px;
+    min-height: 48px;
+    cursor: pointer;
+  }
+
+  .more-row .row-icon {
+    color: var(--lumo-text-secondary);
+    font-size: 18px;
+    flex: 0 0 auto;
+  }
+
+  .more-row .row-label {
+    flex: 1;
+    font-family: var(--lumo-font-body);
+    font-size: var(--lumo-fs-body);
+    color: var(--lumo-text-primary);
+  }
+
+  .more-row .row-value,
+  .more-row .row-hint {
+    font-family: var(--lumo-font-body);
+    font-size: var(--lumo-fs-small);
+    color: var(--lumo-text-secondary);
+  }
+
+  .more-row .row-count {
+    padding: 2px var(--lumo-space-sm);
+    border-radius: var(--lumo-radius-full);
+    background: var(--lumo-primary-subtle);
+    color: var(--lumo-primary);
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: 11px;
+    line-height: 1.4;
+    min-width: 24px;
+    text-align: center;
+  }
+
+  .more-row .row-chev {
+    color: var(--lumo-text-tertiary);
+    font-size: 16px;
+    flex: 0 0 auto;
+  }
+
+  .more-row--disabled {
+    cursor: default;
+
+    .row-label, .row-value { color: var(--lumo-text-tertiary); }
+  }
+}
+
+
 // Task detail — action list, contact list, note text-area
 // Spec: design/handoff_navigation/v5/.../SCREENS.md §04 Tehtävän tarkka näkymä
 .lumo-action-list.dx-list,
