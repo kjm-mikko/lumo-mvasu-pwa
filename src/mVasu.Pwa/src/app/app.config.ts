@@ -82,6 +82,8 @@ function msalInterceptorConfigFactory(): MsalInterceptorConfiguration {
     [`${environment.apiBaseUrl}/api/me/`, [environment.msal.apiScope]],
     [`${environment.apiBaseUrl}/api/tiskilista`, [environment.msal.apiScope]],
     [`${environment.apiBaseUrl}/api/tiskilista/`, [environment.msal.apiScope]],
+    [`${environment.apiBaseUrl}/api/tasks`, [environment.msal.apiScope]],
+    [`${environment.apiBaseUrl}/api/tasks/`, [environment.msal.apiScope]],
   ]);
   return {
     interactionType: InteractionType.Redirect,

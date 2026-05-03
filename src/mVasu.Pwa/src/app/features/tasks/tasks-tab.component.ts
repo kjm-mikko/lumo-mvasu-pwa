@@ -1,18 +1,20 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   inject,
   signal,
 } from '@angular/core';
 import { Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DxButtonModule } from 'devextreme-angular/ui/button';
 import { DxListModule } from 'devextreme-angular/ui/list';
 import { DxLoadPanelModule } from 'devextreme-angular/ui/load-panel';
 import { DxToastModule } from 'devextreme-angular/ui/toast';
 
+import { TasksApiService } from '../../core/services/tasks-api.service';
 import type { TaskAction, TaskCard, TaskGroup } from '../../core/models/task.dto';
-import { buildMockTaskGroups } from './mock-tasks';
 import { TaskCardComponent } from './task-card/task-card.component';
 
 interface DxTaskGroup {
@@ -59,7 +61,19 @@ const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
       ></dx-button>
     </section>
 
-    @if (totalTasks() === 0 && !loading()) {
+    @if (loadError(); as err) {
+      <div class="empty empty--error" role="alert">
+        <p class="empty-title">{{ err }}</p>
+        <p class="empty-sub">Tarkista yhteys ja yritä uudestaan.</p>
+        <dx-button
+          class="empty-cta"
+          text="Yritä uudelleen"
+          type="default"
+          stylingMode="outlined"
+          (onClick)="retry()"
+        ></dx-button>
+      </div>
+    } @else if (totalTasks() === 0 && !loading()) {
       <div class="empty">
         <span class="empty-illustration" aria-hidden="true">✓</span>
         <p class="empty-title">Päivän tehtävät on hoidettu.</p>
@@ -117,10 +131,35 @@ const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
 })
 export class TasksTabComponent {
   private readonly router = inject(Router);
+  private readonly api = inject(TasksApiService);
+  private readonly destroyRef = inject(DestroyRef);
 
-  protected readonly groups = signal<ReadonlyArray<TaskGroup>>(buildMockTaskGroups());
-  protected readonly loading = signal<boolean>(false);
+  protected readonly groups = signal<ReadonlyArray<TaskGroup>>([]);
+  protected readonly loading = signal<boolean>(true);
+  protected readonly loadError = signal<string | null>(null);
   protected readonly toast = signal<ToastState>(TOAST_HIDDEN);
+
+  constructor() {
+    this.fetch();
+  }
+
+  private fetch(): void {
+    this.loading.set(true);
+    this.loadError.set(null);
+    this.api.list()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (groups) => {
+          this.groups.set(groups);
+          this.loading.set(false);
+        },
+        error: (err) => {
+          console.error('[Tasks] /api/tasks failed', err);
+          this.loadError.set('Tehtäviä ei voitu ladata.');
+          this.loading.set(false);
+        },
+      });
+  }
 
   protected readonly totalTasks = computed(() =>
     this.groups().reduce((sum, g) => sum + g.tasks.length, 0),
@@ -172,13 +211,22 @@ export class TasksTabComponent {
     this.router.navigate(['/search']);
   }
 
+  protected retry(): void {
+    this.fetch();
+  }
+
   protected onPullRefresh(): void {
-    this.loading.set(true);
-    setTimeout(() => {
-      this.groups.set(buildMockTaskGroups());
-      this.loading.set(false);
-      this.flash('Päivitetty', 'success');
-    }, 600);
+    this.api.list()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (groups) => {
+          this.groups.set(groups);
+          this.flash('Päivitetty', 'success');
+        },
+        error: () => {
+          this.flash('Päivitys epäonnistui', 'error');
+        },
+      });
   }
 
   protected onToastHide(): void {

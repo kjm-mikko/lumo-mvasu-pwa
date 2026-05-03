@@ -5,6 +5,7 @@ using Microsoft.Identity.Web;
 using mVasu.Api.Authentication;
 using mVasu.Api.Contracts;
 using mVasu.Api.Data;
+using mVasu.Api.Tasks;
 using mVasu.Api.Tiskilista;
 using Scalar.AspNetCore;
 using Serilog;
@@ -55,6 +56,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<IUserResolver, XpoEmailUserResolver>();
 builder.Services.AddScoped<IUserSettingsService, XpoUserSettingsService>();
 builder.Services.AddScoped<ITiskilistaQueryService, TiskilistaQueryService>();
+builder.Services.AddScoped<ITaskQueryService, TaskQueryService>();
 
 builder.Services.AddVasuXpo(builder.Configuration);
 
@@ -321,6 +323,48 @@ app.MapGet("/api/tiskilista/{id:guid}", async (
     })
     .WithName("GetTiskilistaById")
     .WithSummary("Returns the full Tiskilista detail by Oid.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/tasks", async (
+        ClaimsPrincipal user,
+        ITaskQueryService service,
+        DateOnly? from,
+        DateOnly? to,
+        string? userId,
+        string? types,
+        bool? urgentOnly,
+        CancellationToken ct) =>
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (from is not null && to is not null && from > to)
+        {
+            errors[nameof(from)] = ["from must be on or before to."];
+        }
+
+        var typeList = string.IsNullOrWhiteSpace(types)
+            ? null
+            : types.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (errors.Count > 0)
+        {
+            return Results.ValidationProblem(errors);
+        }
+
+        var query = new TaskQueryParameters(
+            From: from,
+            To: to,
+            UserId: string.IsNullOrWhiteSpace(userId) ? "me" : userId,
+            Types: typeList,
+            UrgentOnly: urgentOnly ?? false);
+
+        var result = await service.ListAsync(user, query, ct);
+        return Results.Ok(result);
+    })
+    .WithName("GetTasks")
+    .WithSummary("Aggregates the day-grouped task queue for the authenticated user. " +
+                 "Phase 1 returns a fixed mock fixture; Phase 2 will run XPO queries " +
+                 "across the XAF entity sources listed in BACKEND.md §2.")
     .RequireAuthorization(AccessAsUserPolicy);
 
 try
