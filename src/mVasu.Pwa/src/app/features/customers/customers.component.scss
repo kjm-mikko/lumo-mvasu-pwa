@@ -1,8 +1,8 @@
-// Row-template styles (.people-row, .avatar, .people-tag etc.) live in
+// Row-template styles (.customer-row, .avatar, .count-pill, etc.) live in
 // design/lumo-devextreme-overrides.scss because they render inside
 // dx-list's *dxTemplate, which bypasses Angular's emulated CSS
-// encapsulation. Page-level layout, search bar, chip row and the
-// filter popup body live here.
+// encapsulation. Page-level layout, search bar, chip row and the filter
+// popup body live here.
 
 :host {
   display: block;
@@ -11,7 +11,7 @@
   min-height: 100%;
 }
 
-.people {
+.customers {
   display: flex;
   flex-direction: column;
   padding-bottom: calc(64px + env(safe-area-inset-bottom) + var(--lumo-space-2xl));
@@ -59,7 +59,7 @@
 
 .search-bar {
   position: sticky;
-  top: 64px;                          // sit flush below topbar
+  top: 64px;
   z-index: calc(var(--lumo-z-sticky) - 1);
   padding: var(--lumo-space-sm) var(--lumo-space-lg);
   background: var(--lumo-bg);
@@ -109,16 +109,14 @@
   line-height: 1;
   font-weight: var(--lumo-fw-semibold);
 
-  .chip:hover & {
-    background: rgba(255, 255, 255, 0.25);
-  }
+  .chip:hover & { background: rgba(255, 255, 255, 0.25); }
 }
 
 .chip-clear {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;            // push to the trailing edge of the chip row
+  margin-left: auto;
   padding: 4px 12px;
   border-radius: var(--lumo-radius-full);
   background: transparent;
@@ -144,9 +142,7 @@
   }
 }
 
-.recent {
-  padding: 0;
-}
+.recent { padding: 0; }
 
 .qs-section {
   font-family: var(--lumo-font-body);
@@ -183,9 +179,7 @@
   margin: 0;
 }
 
-.empty-cta {
-  margin-top: var(--lumo-space-md);
-}
+.empty-cta { margin-top: var(--lumo-space-md); }
 
 .filter-body {
   display: flex;

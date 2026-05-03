@@ -146,7 +146,7 @@ export class MainLayoutComponent {
     return [
       first,
       { label: 'Tiskilista', route: '/tiskilista', disabled: false, icon: 'list' },
-      { label: 'Asukkaat',   route: '/people',     disabled: false, icon: 'users' },
+      { label: 'Asiakkaat',  route: '/customers',  disabled: false, icon: 'users' },
       { label: 'Lisää',      route: '/more',       disabled: false, icon: 'more' },
     ];
   });

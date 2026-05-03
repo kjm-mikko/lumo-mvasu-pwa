@@ -63,10 +63,10 @@ export const routes: Routes = [
           import('./features/tiskilista/tiskilista-detail.component').then(m => m.TiskilistaDetailComponent),
       },
       {
-        path: 'people',
+        path: 'customers',
         data: { reuse: true },
         loadComponent: () =>
-          import('./features/people/people.component').then(m => m.PeopleComponent),
+          import('./features/customers/customers.component').then(m => m.CustomersComponent),
       },
       {
         path: 'home-hub',
