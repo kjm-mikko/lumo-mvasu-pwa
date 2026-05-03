@@ -13,13 +13,23 @@
   top: 0;
   z-index: var(--lumo-z-sticky);
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: var(--lumo-space-sm);
   padding: var(--lumo-space-lg) var(--lumo-space-lg) var(--lumo-space-md);
   min-height: 64px;
   background: var(--lumo-bg);
   border-bottom: 1px solid var(--lumo-border);
 }
+
+.topbar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar-search { flex: 0 0 auto; }
 
 .eyebrow {
   font-family: var(--lumo-font-body);

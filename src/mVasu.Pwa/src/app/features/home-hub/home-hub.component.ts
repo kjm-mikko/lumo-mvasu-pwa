@@ -9,6 +9,7 @@ import {
 import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DxAccordionModule } from 'devextreme-angular/ui/accordion';
+import { DxButtonModule } from 'devextreme-angular/ui/button';
 import { DxToastModule } from 'devextreme-angular/ui/toast';
 
 import { greetingFor } from '../../core/services/greeting';
@@ -56,13 +57,22 @@ const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
  */
 @Component({
   selector: 'app-home-hub',
-  imports: [DxAccordionModule, DxToastModule],
+  imports: [DxAccordionModule, DxButtonModule, DxToastModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <main class="home-hub">
       <section class="topbar">
-        <span class="eyebrow">{{ greeting() }}{{ greetingName() ? ', ' + greetingName() : '' }}</span>
-        <h1 class="title">Koti</h1>
+        <div class="topbar-text">
+          <span class="eyebrow">{{ greeting() }}{{ greetingName() ? ', ' + greetingName() : '' }}</span>
+          <h1 class="title">Koti</h1>
+        </div>
+        <dx-button
+          class="topbar-search"
+          icon="search"
+          stylingMode="text"
+          [elementAttr]="{ 'aria-label': 'Avaa pikahaku' }"
+          (onClick)="openSearch()"
+        ></dx-button>
       </section>
 
       <dx-accordion
@@ -187,6 +197,10 @@ export class HomeHubComponent {
         next: (p) => this.profile.set(p),
         error: () => { /* greeting falls back to no name */ },
       });
+  }
+
+  protected openSearch(): void {
+    this.router.navigate(['/search']);
   }
 
   protected onTile(tile: HubTile): void {

@@ -6,6 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import { Router } from '@angular/router';
+import { DxButtonModule } from 'devextreme-angular/ui/button';
 import { DxListModule } from 'devextreme-angular/ui/list';
 import { DxLoadPanelModule } from 'devextreme-angular/ui/load-panel';
 import { DxToastModule } from 'devextreme-angular/ui/toast';
@@ -41,12 +42,21 @@ const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
  */
 @Component({
   selector: 'app-tasks-tab',
-  imports: [DxListModule, DxLoadPanelModule, DxToastModule, TaskCardComponent],
+  imports: [DxButtonModule, DxListModule, DxLoadPanelModule, DxToastModule, TaskCardComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="topbar">
-      <span class="eyebrow">Päivän työ</span>
-      <h1 class="title">Tehtävät</h1>
+      <div class="topbar-text">
+        <span class="eyebrow">Päivän työ</span>
+        <h1 class="title">Tehtävät</h1>
+      </div>
+      <dx-button
+        class="topbar-search"
+        icon="search"
+        stylingMode="text"
+        [elementAttr]="{ 'aria-label': 'Avaa pikahaku' }"
+        (onClick)="openSearch()"
+      ></dx-button>
     </section>
 
     @if (totalTasks() === 0 && !loading()) {
@@ -156,6 +166,10 @@ export class TasksTabComponent {
     };
     const message = verbs[event.id] ?? `Toiminto: ${event.id}`;
     this.flash(`${message} (mock)`, event.id === 'cancel' ? 'warning' : 'info');
+  }
+
+  protected openSearch(): void {
+    this.router.navigate(['/search']);
   }
 
   protected onPullRefresh(): void {

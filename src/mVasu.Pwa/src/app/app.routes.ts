@@ -29,6 +29,12 @@ export const routes: Routes = [
       import('./features/auth-callback/auth-callback.component').then(m => m.AuthCallbackComponent),
   },
   {
+    path: 'search',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/search/quick-search.component').then(m => m.QuickSearchComponent),
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () =>

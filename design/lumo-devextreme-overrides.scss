@@ -408,6 +408,95 @@
   }
 }
 
+// Quick search — dx-list grouped, hit rows with mark() highlight.
+// Spec: design/handoff_navigation/v5/.../SCREENS.md §05, BEHAVIOR.md §6.
+.lumo-search-list.dx-list {
+  background: transparent;
+  border: 0;
+  padding: 0 0 var(--lumo-space-2xl);
+
+  .dx-empty-message { display: none; }
+
+  .dx-list-group {
+    border: 0;
+    background: transparent;
+  }
+
+  .dx-list-group-header {
+    background: var(--lumo-bg);
+    border: 0;
+    padding: 0;
+  }
+
+  .dx-list-group-body {
+    padding: 0;
+    background: transparent;
+  }
+
+  .dx-list-item {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+
+    &.dx-state-hover, &.dx-state-focused {
+      background: var(--lumo-primary-subtle);
+    }
+
+    .dx-list-item-content { padding: 0; }
+  }
+
+  .qs-row {
+    display: flex;
+    align-items: center;
+    gap: var(--lumo-space-md);
+    padding: 10px var(--lumo-space-lg);
+    min-height: 56px;
+    border-bottom: 1px solid var(--lumo-surface);
+  }
+
+  .qs-icon {
+    color: var(--lumo-text-secondary);
+    font-size: 18px;
+    flex: 0 0 auto;
+  }
+
+  .qs-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .qs-title {
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: var(--lumo-fs-small);
+    color: var(--lumo-text-primary);
+
+    mark {
+      background: var(--lumo-cta-subtle);
+      color: var(--lumo-cta);
+      padding: 0 2px;
+      border-radius: var(--lumo-radius-sm);
+    }
+  }
+
+  .qs-meta {
+    font-family: var(--lumo-font-body);
+    font-size: 12px;
+    color: var(--lumo-text-secondary);
+
+    mark {
+      background: var(--lumo-cta-subtle);
+      color: var(--lumo-cta);
+      padding: 0 2px;
+      border-radius: var(--lumo-radius-sm);
+    }
+  }
+}
+
+
 // More tab — XAF module groups (ASMA / KIRE) + app settings list-groups.
 // Spec: design/handoff_navigation/v5/.../SCREENS.md §03, NAVIGATION.md §4b.
 //
