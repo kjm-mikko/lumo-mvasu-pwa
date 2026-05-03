@@ -308,9 +308,14 @@
     background: var(--lumo-bg);
     border: 0;
     padding: 0;
+    // Sticky inside the dx-list's own scroll viewport (pullRefreshEnabled
+    // gives the list its own scrollable area), so `top: 0` keeps the day
+    // label flush against the list's top edge — i.e. directly below the
+    // page-level topbar — instead of mid-card.
     position: sticky;
-    top: 64px;                  // sit under sticky topbar
+    top: 0;
     z-index: calc(var(--lumo-z-sticky) - 1);
+    box-shadow: 0 4px 4px -4px rgba(15, 23, 42, 0.06);
   }
 
   .dx-list-group-body {
@@ -401,6 +406,42 @@
     font-size: var(--lumo-fs-small);
     font-weight: var(--lumo-fw-medium);
   }
+}
+
+// Task detail — action list, contact list, note text-area
+// Spec: design/handoff_navigation/v5/.../SCREENS.md §04 Tehtävän tarkka näkymä
+.lumo-action-list.dx-list,
+.lumo-contact-list.dx-list {
+  background: var(--lumo-surface-elevated);
+  border: 1px solid var(--lumo-border);
+  border-radius: var(--lumo-radius-xl);
+  overflow: hidden;
+
+  .dx-empty-message { display: none; }
+
+  .dx-list-item {
+    border-bottom: 1px solid var(--lumo-border);
+
+    &:last-child { border-bottom: 0; }
+
+    .dx-list-item-content { padding: 0; }
+  }
+}
+
+.lumo-action-list.dx-list .dx-list-item {
+  cursor: pointer;
+  &.dx-state-hover { background: var(--lumo-primary-subtle); }
+}
+
+.lumo-contact-list.dx-list .dx-list-item {
+  cursor: default;
+  &.dx-state-hover, &.dx-state-focused { background: transparent; }
+}
+
+.lumo-note.dx-texteditor.dx-editor-outlined {
+  border-radius: var(--lumo-radius-lg);
+  background: var(--lumo-surface);
+  min-height: 80px;
 }
 
 // dx-drop-down-button styled as a kebab — tight square, no chevron arrow

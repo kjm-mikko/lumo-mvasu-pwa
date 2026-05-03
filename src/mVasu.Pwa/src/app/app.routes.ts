@@ -25,8 +25,14 @@ export const routes: Routes = [
     children: [
       {
         path: 'tasks',
+        data: { reuse: true },
         loadComponent: () =>
           import('./features/tasks/tasks-tab.component').then(m => m.TasksTabComponent),
+      },
+      {
+        path: 'tasks/:id',
+        loadComponent: () =>
+          import('./features/tasks/task-detail.component').then(m => m.TaskDetailComponent),
       },
       {
         path: 'settings',

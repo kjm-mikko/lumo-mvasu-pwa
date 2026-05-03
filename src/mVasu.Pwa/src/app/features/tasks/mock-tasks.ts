@@ -1,4 +1,5 @@
 import type { TaskCard, TaskGroup, TaskGroupId } from '../../core/models/task.dto';
+import type { TaskDetail, TaskRowAction } from '../../core/models/task-detail.dto';
 
 /**
  * Static mock data for the Task tab while the backend is being designed.
@@ -309,4 +310,129 @@ function accentRank(accent: TaskCard['accent']): number {
     case 'info': return 2;
     case 'navy': return 3;
   }
+}
+
+const TYPE_LABELS: Record<TaskCard['type'], string> = {
+  'visit-introduction':  'Tutustumiskäynti',
+  'visit-reservation':   'Varausesittely',
+  'open-house':          'Yleisesittely',
+  'signature-pending':   'Allekirjoitus',
+  'inbox-termination':   'Saapunut irtisanominen',
+  'inbox-signed':        'Allekirjoitettu palautunut',
+  'photo-scheduled':     'Valokuvaus',
+  'renovation-approval': 'Remontti',
+  'lead-callback':       'Liidi',
+  'desk-list-item':      'Tiskilista',
+};
+
+/** Default row-actions per task type; aligns with SCREENS.md §04 and BACKEND.md §6. */
+function actionsFor(type: TaskCard['type']): ReadonlyArray<TaskRowAction> {
+  const common: ReadonlyArray<TaskRowAction> = [
+    { id: 'navigate-unit', label: 'Avaa kohde Lumo Verkossa', kind: 'external',
+      href: 'https://www.lumo.fi/' },
+    { id: 'mark-done', label: 'Merkitse tehdyksi', kind: 'mark-done',
+      confirm: { title: 'Vahvistus', body: 'Tehtävä merkitään tehdyksi. Jatka?' } },
+    { id: 'cancel', label: 'Peruuta', kind: 'cancel', destructive: true,
+      confirm: { title: 'Peruuta', body: 'Peruutetaanko tehtävä? Toiminto kirjataan auditiin.' } },
+  ];
+  switch (type) {
+    case 'visit-introduction':
+    case 'visit-reservation':
+      return [
+        common[0],
+        { id: 'create-offer', label: 'Tee tarjous tästä', kind: 'create-offer' },
+        { id: 'mark-done', label: 'Merkitse pidetyksi', kind: 'mark-done',
+          confirm: { title: 'Käynti pidetty?', body: 'Käynti merkitään pidetyksi.' } },
+        common[2],
+      ];
+    case 'signature-pending':
+      return [
+        common[0],
+        { id: 'mark-done', label: 'Merkitse allekirjoitetuksi', kind: 'mark-done',
+          confirm: { title: 'Vahvistus', body: 'Allekirjoitus merkitään valmiiksi.' } },
+        common[2],
+      ];
+    case 'inbox-termination':
+    case 'inbox-signed':
+      return [
+        { id: 'mark-done', label: 'Merkitse käsitellyksi', kind: 'mark-done',
+          confirm: { title: 'Vahvistus', body: 'Tehtävä merkitään käsitellyksi.' } },
+      ];
+    default:
+      return common;
+  }
+}
+
+function initialsFrom(who: string | undefined): string {
+  if (!who) return '··';
+  const cleaned = who.split('·')[0].trim();
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '··';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function phoneFrom(who: string | undefined): string | undefined {
+  if (!who) return undefined;
+  const match = who.match(/(\+?\d[\d\s]{5,})/);
+  return match ? match[1].trim() : undefined;
+}
+
+function findCard(id: string): TaskCard | null {
+  for (const seed of seeds) {
+    const found = seed.tasks.find(t => t.id === id);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * Build a TaskDetail for the given task id. Returns null when the id is
+ * unknown — the component can show a "not found" state. Once the BACKEND
+ * `/api/tasks/:id` endpoint exists, this function is replaced by a service
+ * call returning the same shape.
+ */
+export function buildMockTaskDetail(id: string): TaskDetail | null {
+  const card = findCard(id);
+  if (!card) return null;
+
+  const type = card.type;
+  const customer = card.who ? {
+    id: `customer-${card.id}`,
+    name: card.who.split('·')[0].trim(),
+    initials: initialsFrom(card.who),
+    phone: phoneFrom(card.who),
+  } : undefined;
+
+  const subtitle = card.meta;
+
+  const timeContext = card.when.note
+    ? `${card.when.time} · ${card.when.note}`
+    : card.when.time;
+
+  return {
+    id: card.id,
+    type,
+    typeLabel: card.typeLabel ?? TYPE_LABELS[type],
+    accent: card.accent,
+    timeContext,
+    title: card.title,
+    subtitle,
+    customer,
+    actions: actionsFor(type),
+    note: {
+      id: `note-${card.id}`,
+      body:
+        type === 'visit-introduction' || type === 'visit-reservation'
+          ? 'Asiakas on muuttamassa kohti pääkaupunkiseutua. Painottaa rauhallista naapurustoa.'
+          : type === 'inbox-termination'
+            ? 'Asiakas vahvisti irtisanomisen sähköpostissa 30.4. Ei lisätietoja.'
+            : '',
+      updatedAt: '2026-05-01T08:30:00+03:00',
+    },
+    primaryCta: card.actions.find(a => a.primary) ?? card.actions[0] ?? {
+      kind: 'navigate', label: 'Avaa kohde', primary: true,
+    },
+    entityRef: card.entityRef,
+  };
 }
