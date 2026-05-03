@@ -63,6 +63,12 @@ export const routes: Routes = [
           import('./features/tiskilista/tiskilista-detail.component').then(m => m.TiskilistaDetailComponent),
       },
       {
+        path: 'people',
+        data: { reuse: true },
+        loadComponent: () =>
+          import('./features/people/people.component').then(m => m.PeopleComponent),
+      },
+      {
         path: 'home-hub',
         data: { reuse: true },
         loadComponent: () =>

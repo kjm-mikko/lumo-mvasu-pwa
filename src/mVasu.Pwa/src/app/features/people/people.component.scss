@@ -1,0 +1,235 @@
+// Row-template styles (.people-row, .avatar, .people-tag etc.) live in
+// design/lumo-devextreme-overrides.scss because they render inside
+// dx-list's *dxTemplate, which bypasses Angular's emulated CSS
+// encapsulation. Page-level layout, search bar, chip row and the
+// filter popup body live here.
+
+:host {
+  display: block;
+  background: var(--lumo-bg);
+  color: var(--lumo-text-primary);
+  min-height: 100%;
+}
+
+.people {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(64px + env(safe-area-inset-bottom) + var(--lumo-space-2xl));
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--lumo-z-sticky);
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-sm);
+  padding: var(--lumo-space-lg) var(--lumo-space-lg) var(--lumo-space-md);
+  min-height: 64px;
+  background: var(--lumo-bg);
+  border-bottom: 1px solid var(--lumo-border);
+}
+
+.topbar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar-search,
+.topbar-filter { flex: 0 0 auto; }
+
+.eyebrow {
+  font-family: var(--lumo-font-body);
+  font-size: 12px;
+  color: var(--lumo-text-secondary);
+}
+
+.title {
+  font-family: var(--lumo-font-heading);
+  font-weight: var(--lumo-fw-semibold);
+  font-size: 22px;
+  color: var(--lumo-text-primary);
+  margin: 0;
+}
+
+.search-bar {
+  position: sticky;
+  top: 64px;                          // sit flush below topbar
+  z-index: calc(var(--lumo-z-sticky) - 1);
+  padding: var(--lumo-space-sm) var(--lumo-space-lg);
+  background: var(--lumo-bg);
+  border-bottom: 1px solid var(--lumo-border);
+}
+
+.search-input { width: 100%; }
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lumo-space-sm);
+  padding: var(--lumo-space-sm) var(--lumo-space-lg);
+  background: var(--lumo-surface);
+  border-bottom: 1px solid var(--lumo-border);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 12px;
+  border-radius: var(--lumo-radius-full);
+  background: var(--lumo-primary-subtle);
+  color: var(--lumo-primary);
+  border: 1px solid var(--lumo-primary);
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-medium);
+  font-size: var(--lumo-fs-small);
+  cursor: pointer;
+  transition: background var(--lumo-duration-fast) var(--lumo-easing),
+              color var(--lumo-duration-fast) var(--lumo-easing);
+
+  &:hover { background: var(--lumo-primary); color: var(--lumo-text-on-primary); }
+}
+
+.chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--lumo-radius-full);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  line-height: 1;
+  font-weight: var(--lumo-fw-semibold);
+
+  .chip:hover & {
+    background: rgba(255, 255, 255, 0.25);
+  }
+}
+
+.chip-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;            // push to the trailing edge of the chip row
+  padding: 4px 12px;
+  border-radius: var(--lumo-radius-full);
+  background: transparent;
+  border: 1px solid var(--lumo-border-strong);
+  color: var(--lumo-text-secondary);
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-medium);
+  font-size: var(--lumo-fs-small);
+  cursor: pointer;
+
+  &::before {
+    content: '×';
+    font-size: 16px;
+    line-height: 1;
+    color: var(--lumo-text-secondary);
+  }
+
+  &:hover {
+    background: var(--lumo-danger-subtle);
+    border-color: var(--lumo-danger);
+    color: var(--lumo-danger);
+    &::before { color: var(--lumo-danger); }
+  }
+}
+
+.recent {
+  padding: 0;
+}
+
+.qs-section {
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-medium);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lumo-text-tertiary);
+  padding: 14px var(--lumo-space-lg) 6px;
+  margin: 0;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lumo-space-sm);
+  padding: var(--lumo-space-3xl) var(--lumo-space-lg);
+  text-align: center;
+}
+
+.empty-title {
+  font-family: var(--lumo-font-heading);
+  font-weight: var(--lumo-fw-semibold);
+  font-size: var(--lumo-fs-h2);
+  color: var(--lumo-text-primary);
+  margin: 0;
+}
+
+.empty-sub {
+  font-family: var(--lumo-font-body);
+  font-size: var(--lumo-fs-small);
+  color: var(--lumo-text-secondary);
+  margin: 0;
+}
+
+.empty-cta {
+  margin-top: var(--lumo-space-md);
+}
+
+.filter-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-md);
+}
+
+.filter-h {
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-medium);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lumo-text-tertiary);
+  margin: 0;
+}
+
+.filter-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  &--wrap {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+.filter-option {
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid var(--lumo-border);
+  border-radius: var(--lumo-radius-full);
+  font-family: var(--lumo-font-body);
+  font-size: var(--lumo-fs-small);
+  color: var(--lumo-text-primary);
+  cursor: pointer;
+  text-align: left;
+
+  &:hover { background: var(--lumo-primary-subtle); }
+
+  &--active {
+    border-color: var(--lumo-primary);
+    background: var(--lumo-primary-subtle);
+    color: var(--lumo-primary);
+  }
+}

@@ -408,6 +408,112 @@
   }
 }
 
+// People tab — dx-list flat, alphabetical, with avatar + tag chip rows.
+// Spec: design/handoff_navigation/v5/.../SCREENS.md §02, BEHAVIOR.md §3.
+.lumo-people-list.dx-list {
+  background: transparent;
+  border: 0;
+  padding: 0;
+
+  .dx-empty-message { display: none; }
+
+  .dx-list-item {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--lumo-surface);
+    padding: 0;
+    cursor: pointer;
+
+    &.dx-state-hover, &.dx-state-focused {
+      background: var(--lumo-primary-subtle);
+    }
+
+    .dx-list-item-content { padding: 0; }
+  }
+
+  .people-row {
+    display: flex;
+    align-items: center;
+    gap: var(--lumo-space-md);
+    padding: 12px var(--lumo-space-lg);
+    min-height: 64px;
+  }
+
+  .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--lumo-radius-full);
+    background: var(--lumo-primary-subtle);
+    color: var(--lumo-primary);
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+
+    &[data-tone='cta']  { background: var(--lumo-cta-subtle);  color: var(--lumo-cta); }
+    &[data-tone='info'] { background: var(--lumo-info-subtle); color: var(--lumo-info); }
+  }
+
+  .people-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .people-name {
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: var(--lumo-fs-small);
+    color: var(--lumo-text-primary);
+
+    mark {
+      background: var(--lumo-cta-subtle);
+      color: var(--lumo-cta);
+      padding: 0 2px;
+      border-radius: var(--lumo-radius-sm);
+    }
+  }
+
+  .people-meta {
+    font-family: var(--lumo-font-body);
+    font-size: 12px;
+    color: var(--lumo-text-secondary);
+
+    mark {
+      background: var(--lumo-cta-subtle);
+      color: var(--lumo-cta);
+      padding: 0 2px;
+      border-radius: var(--lumo-radius-sm);
+    }
+  }
+
+  .people-tag {
+    padding: 3px 8px;
+    border-radius: var(--lumo-radius-full);
+    background: var(--lumo-surface);
+    color: var(--lumo-text-secondary);
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: 10px;
+    line-height: 1.4;
+    white-space: nowrap;
+
+    &[data-tone='cta']  { background: var(--lumo-cta-subtle);  color: var(--lumo-cta); }
+    &[data-tone='info'] { background: var(--lumo-info-subtle); color: var(--lumo-info); }
+  }
+
+  .people-chev {
+    color: var(--lumo-text-tertiary);
+    font-size: 16px;
+    flex: 0 0 auto;
+  }
+}
+
+
 // Quick search — dx-list grouped, hit rows with mark() highlight.
 // Spec: design/handoff_navigation/v5/.../SCREENS.md §05, BEHAVIOR.md §6.
 .lumo-search-list.dx-list {
