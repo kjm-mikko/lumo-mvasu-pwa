@@ -9,9 +9,10 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { catchError, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
+import { DxButtonModule } from 'devextreme-angular/ui/button';
 
 import { TiskilistaApiService } from '../../core/services/tiskilista-api.service';
 import { LocationService } from '../../core/services/location.service';
@@ -26,14 +27,23 @@ import { DEFAULT_TISKILISTA_QUERY } from '../../core/models/tiskilista-list-quer
 
 @Component({
   selector: 'app-tiskilista-list',
-  imports: [RouterLink, FormsModule, CurrencyPipe, DatePipe, DecimalPipe],
+  imports: [DxButtonModule, RouterLink, FormsModule, CurrencyPipe, DatePipe, DecimalPipe],
   template: `
     <main class="tiskilista">
       <header>
-        <h1>Tiskilista</h1>
-        @if (page(); as p) {
-          <span class="count">{{ p.total }} huoneistoa</span>
-        }
+        <div class="header-text">
+          <h1>Tiskilista</h1>
+          @if (page(); as p) {
+            <span class="count">{{ p.total }} huoneistoa</span>
+          }
+        </div>
+        <dx-button
+          class="header-search"
+          icon="search"
+          stylingMode="text"
+          [elementAttr]="{ 'aria-label': 'Avaa pikahaku' }"
+          (onClick)="openQuickSearch()"
+        ></dx-button>
       </header>
 
       <section class="filters" role="search">
@@ -143,6 +153,11 @@ export class TiskilistaListComponent {
   private readonly api = inject(TiskilistaApiService);
   private readonly location = inject(LocationService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
+
+  protected openQuickSearch(): void {
+    this.router.navigate(['/search']);
+  }
 
   protected readonly searchInput = signal<string>('');
   protected readonly scope = signal<TiskilistaScope>('omat');

@@ -9,10 +9,20 @@
 
 header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--lumo-space-md);
-  flex-wrap: wrap;
+
+  .header-text {
+    display: flex;
+    align-items: baseline;
+    gap: var(--lumo-space-md);
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .header-search { flex: 0 0 auto; }
 
   h1 {
     font-family: var(--lumo-font-heading);

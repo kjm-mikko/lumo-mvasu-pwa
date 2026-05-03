@@ -40,6 +40,29 @@ interface ConfirmState {
 
 const CONFIRM_HIDDEN: ConfirmState = { visible: false, title: '', body: '', action: null };
 
+interface ReasonOption {
+  readonly id: string;
+  readonly label: string;
+}
+
+const REASON_OPTIONS: ReadonlyArray<ReasonOption> = [
+  { id: 'customer-cancelled',  label: 'Asiakas peruutti' },
+  { id: 'customer-no-show',    label: 'Asiakas ei saapunut' },
+  { id: 'unsuitable',          label: 'Kohde ei sovellu' },
+  { id: 'reschedule',          label: 'Sovittiin uusi aika' },
+  { id: 'technical',           label: 'Tekninen ongelma' },
+  { id: 'other',               label: 'Muu syy' },
+];
+
+interface ReasonState {
+  readonly visible: boolean;
+  readonly action: TaskRowAction | null;
+  readonly selectedId: string | null;
+  readonly comment: string;
+}
+
+const REASON_HIDDEN: ReasonState = { visible: false, action: null, selectedId: null, comment: '' };
+
 /**
  * Detail view for a single task — Tutustumiskäynti / Yleisesittely /
  * Tarjous / Tehtävä etc. Mock-data only; the BACKEND.md `/api/tasks/:id`
@@ -194,6 +217,69 @@ const CONFIRM_HIDDEN: ConfirmState = { visible: false, title: '', body: '', acti
       </div>
     </dx-popup>
 
+    <dx-popup
+      [visible]="reason().visible"
+      title="Peruutuksen syy"
+      [width]="'90%'"
+      [maxWidth]="420"
+      [height]="'auto'"
+      [showCloseButton]="true"
+      [hideOnOutsideClick]="true"
+      [position]="reasonPopupPosition"
+      (onHiding)="onReasonCancel()"
+    >
+      <div *dxTemplate="let _ of 'content'" class="reason-body">
+        <p class="reason-hint">
+          Valitse syy, joka kirjataan auditiin. Kommentti on valinnainen
+          paitsi "Muu syy" -tapauksessa.
+        </p>
+        <ul class="reason-options" role="list">
+          @for (opt of reasonOptions; track opt.id) {
+            <li>
+              <button
+                type="button"
+                class="reason-option"
+                [class.reason-option--active]="reason().selectedId === opt.id"
+                (click)="selectReason(opt.id)"
+              >
+                <span class="reason-radio" aria-hidden="true">
+                  @if (reason().selectedId === opt.id) {
+                    <i class="dx-icon dx-icon-check"></i>
+                  }
+                </span>
+                <span class="reason-label">{{ opt.label }}</span>
+              </button>
+            </li>
+          }
+        </ul>
+
+        <dx-text-area
+          class="lumo-note reason-comment"
+          [value]="reason().comment"
+          placeholder="Kommentti (valinnainen)"
+          [autoResizeEnabled]="true"
+          [minHeight]="64"
+          (onValueChanged)="onReasonComment($event)"
+        ></dx-text-area>
+
+        <div class="reason-actions">
+          <dx-button
+            text="Sulje"
+            stylingMode="outlined"
+            type="default"
+            (onClick)="onReasonCancel()"
+          ></dx-button>
+          <dx-button
+            text="Vahvista peruutus"
+            stylingMode="contained"
+            type="danger"
+            [disabled]="!canConfirmReason()"
+            (onClick)="onReasonConfirm()"
+          ></dx-button>
+        </div>
+      </div>
+    </dx-popup>
+
     <dx-toast
       [visible]="toast().visible"
       [message]="toast().message"
@@ -229,6 +315,24 @@ export class TaskDetailComponent {
   );
   protected readonly toast = signal<ToastState>(TOAST_HIDDEN);
   protected readonly confirm = signal<ConfirmState>(CONFIRM_HIDDEN);
+  protected readonly reason = signal<ReasonState>(REASON_HIDDEN);
+
+  protected readonly reasonOptions = REASON_OPTIONS;
+
+  /** Bottom-sheet positioning per BEHAVIOR.md §7 (Bottom-sheet slide up 280 ms). */
+  protected readonly reasonPopupPosition = {
+    my: { x: 'center', y: 'bottom' } as const,
+    at: { x: 'center', y: 'bottom' } as const,
+    of: 'window',
+    offset: { x: 0, y: 0 },
+  };
+
+  protected readonly canConfirmReason = computed<boolean>(() => {
+    const r = this.reason();
+    if (!r.selectedId) return false;
+    if (r.selectedId === 'other' && r.comment.trim().length === 0) return false;
+    return true;
+  });
 
   protected customerItems(c: TaskCustomer): TaskCustomer[] {
     return [c];
@@ -242,6 +346,18 @@ export class TaskDetailComponent {
   protected onActionClick(event: { itemData?: TaskRowAction }): void {
     const action = event.itemData;
     if (!action) return;
+
+    // Cancel actions go through the reason picker; pre-defined reasons
+    // are required by BEHAVIOR.md §5 + auditability rules.
+    if (action.kind === 'cancel') {
+      this.reason.set({
+        visible: true,
+        action,
+        selectedId: null,
+        comment: '',
+      });
+      return;
+    }
 
     if (action.confirm) {
       this.confirm.set({
@@ -264,6 +380,32 @@ export class TaskDetailComponent {
 
   protected onConfirmCancel(): void {
     this.confirm.set(CONFIRM_HIDDEN);
+  }
+
+  protected selectReason(id: string): void {
+    this.reason.update(r => ({ ...r, selectedId: id }));
+  }
+
+  protected onReasonComment(event: { value?: string | null }): void {
+    const comment = event.value ?? '';
+    this.reason.update(r => ({ ...r, comment }));
+  }
+
+  protected onReasonCancel(): void {
+    this.reason.set(REASON_HIDDEN);
+  }
+
+  protected onReasonConfirm(): void {
+    const r = this.reason();
+    if (!r.action || !r.selectedId) return;
+    const optionLabel = REASON_OPTIONS.find(o => o.id === r.selectedId)?.label ?? r.selectedId;
+    const note = r.comment.trim();
+    this.reason.set(REASON_HIDDEN);
+    this.flash(
+      note ? `Tehtävä peruutettu: ${optionLabel} — "${note}" (mock)`
+           : `Tehtävä peruutettu: ${optionLabel} (mock)`,
+      'warning',
+    );
   }
 
   protected onNoteChange(event: { value?: string | null }): void {
