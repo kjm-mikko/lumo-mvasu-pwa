@@ -14,6 +14,17 @@ public interface ITaskQueryService
         ClaimsPrincipal principal,
         TaskQueryParameters query,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the full detail for the task with the given id, or null
+    /// when no task with that id is visible to the principal. Phase 2
+    /// resolves the XAF entity via <see cref="TaskEntityRefDto"/>; today
+    /// it looks the row up in the same mock fixture as ListAsync.
+    /// </summary>
+    Task<TaskDetailDto?> GetAsync(
+        ClaimsPrincipal principal,
+        string id,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>

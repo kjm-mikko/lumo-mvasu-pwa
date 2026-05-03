@@ -1,20 +1,24 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
+  effect,
   inject,
   input,
   linkedSignal,
   signal,
 } from '@angular/core';
 import { Location } from '@angular/common';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { catchError, of, switchMap } from 'rxjs';
 import { DxButtonModule } from 'devextreme-angular/ui/button';
 import { DxListModule } from 'devextreme-angular/ui/list';
 import { DxPopupModule } from 'devextreme-angular/ui/popup';
 import { DxTextAreaModule } from 'devextreme-angular/ui/text-area';
 import { DxToastModule } from 'devextreme-angular/ui/toast';
 
-import { buildMockTaskDetail } from './mock-tasks';
+import { TasksApiService } from '../../core/services/tasks-api.service';
 import type {
   TaskCustomer,
   TaskDetail,
@@ -62,6 +66,12 @@ interface ReasonState {
 }
 
 const REASON_HIDDEN: ReasonState = { visible: false, action: null, selectedId: null, comment: '' };
+
+type DetailState =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'loaded'; readonly value: TaskDetail }
+  | { readonly kind: 'not-found' }
+  | { readonly kind: 'error' };
 
 /**
  * Detail view for a single task — Tutustumiskäynti / Yleisesittely /
@@ -183,10 +193,22 @@ const REASON_HIDDEN: ReasonState = { visible: false, action: null, selectedId: n
           (onClick)="onPrimaryCta()"
         ></dx-button>
       </footer>
-    } @else {
+    } @else if (loading()) {
+      <p class="status" role="status">Ladataan tehtävää…</p>
+    } @else if (notFound()) {
       <p class="status status--error" role="alert">
         Tehtävää ei löytynyt (id: {{ id() }}).
       </p>
+    } @else if (loadError()) {
+      <div class="status status--error" role="alert">
+        <p>Tehtävän lataus epäonnistui.</p>
+        <dx-button
+          text="Yritä uudelleen"
+          stylingMode="outlined"
+          type="default"
+          (onClick)="retry()"
+        ></dx-button>
+      </div>
     }
 
     <dx-popup
@@ -292,16 +314,47 @@ const REASON_HIDDEN: ReasonState = { visible: false, action: null, selectedId: n
 })
 export class TaskDetailComponent {
   private readonly location = inject(Location);
+  private readonly api = inject(TasksApiService);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** Bound from the route param via withComponentInputBinding. */
   readonly id = input.required<string>();
 
-  protected readonly detail = computed<TaskDetail | null>(() =>
-    buildMockTaskDetail(this.id()),
-  );
+  /**
+   * Re-fetches `/api/tasks/:id` whenever the route id changes. Maps
+   * to a tagged result so the template can distinguish "still loading",
+   * "loaded", and "not found / errored" — driving the three states the
+   * UI cares about. `effect()` in the constructor watches `id()` to
+   * trigger refetch; the result lands in this signal.
+   */
+  protected readonly detailState = signal<DetailState>({ kind: 'loading' });
+  protected readonly detail = computed<TaskDetail | null>(() => {
+    const s = this.detailState();
+    return s.kind === 'loaded' ? s.value : null;
+  });
+  protected readonly loading = computed(() => this.detailState().kind === 'loading');
+  protected readonly notFound = computed(() => this.detailState().kind === 'not-found');
+  protected readonly loadError = computed(() => this.detailState().kind === 'error');
   protected readonly actions = computed<TaskRowAction[]>(() =>
     [...(this.detail()?.actions ?? [])],
   );
+
+  constructor() {
+    effect(() => {
+      const id = this.id();
+      this.detailState.set({ kind: 'loading' });
+      this.api.get(id)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (value) => this.detailState.set({ kind: 'loaded', value }),
+          error: (err) => {
+            const status = (err as { status?: number })?.status;
+            this.detailState.set(status === 404 ? { kind: 'not-found' } : { kind: 'error' });
+            console.error('[TaskDetail] /api/tasks/:id failed', err);
+          },
+        });
+    });
+  }
 
   /**
    * Auto-initialises from the resolved detail's note body when the route id
@@ -426,6 +479,20 @@ export class TaskDetailComponent {
 
   protected goBack(): void {
     this.location.back();
+  }
+
+  protected retry(): void {
+    const id = this.id();
+    this.detailState.set({ kind: 'loading' });
+    this.api.get(id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (value) => this.detailState.set({ kind: 'loaded', value }),
+        error: (err) => {
+          const status = (err as { status?: number })?.status;
+          this.detailState.set(status === 404 ? { kind: 'not-found' } : { kind: 'error' });
+        },
+      });
   }
 
   protected onToastHide(): void {

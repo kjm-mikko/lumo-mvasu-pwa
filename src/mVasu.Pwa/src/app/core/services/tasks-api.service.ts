@@ -12,6 +12,13 @@ import type {
   TaskGroupId,
   TaskType,
 } from '../models/task.dto';
+import type {
+  TaskCustomer,
+  TaskDetail,
+  TaskNote,
+  TaskRowAction,
+  TaskRowActionKind,
+} from '../models/task-detail.dto';
 
 /** Wire shape coming back from `GET /api/tasks`. Mirrors mVasu.Api.Contracts.TasksResponseDto. */
 interface TasksResponseDto {
@@ -48,6 +55,45 @@ interface TaskActionDto {
   readonly primary: boolean;
   readonly destructive: boolean;
   readonly href?: string | null;
+}
+
+/** Wire shape for `GET /api/tasks/:id`. Mirrors mVasu.Api.Contracts.TaskDetailDto. */
+interface TaskDetailWireDto {
+  readonly id: string;
+  readonly type: string;
+  readonly typeLabel: string;
+  readonly accent: string;
+  readonly timeContext: string;
+  readonly title: string;
+  readonly subtitle?: string | null;
+  readonly customer?: TaskCustomerWireDto | null;
+  readonly actions: ReadonlyArray<TaskRowActionWireDto>;
+  readonly note?: TaskNoteWireDto | null;
+  readonly primaryCta: TaskActionDto;
+  readonly entityRef: { readonly module: string; readonly entityType: string; readonly id: string };
+}
+
+interface TaskCustomerWireDto {
+  readonly id: string;
+  readonly name: string;
+  readonly initials: string;
+  readonly phone?: string | null;
+  readonly email?: string | null;
+}
+
+interface TaskRowActionWireDto {
+  readonly id: string;
+  readonly label: string;
+  readonly kind: string;
+  readonly destructive: boolean;
+  readonly confirm?: { readonly title: string; readonly body: string } | null;
+  readonly href?: string | null;
+}
+
+interface TaskNoteWireDto {
+  readonly id: string;
+  readonly body: string;
+  readonly updatedAt: string;
 }
 
 export interface TasksQueryOptions {
@@ -87,6 +133,12 @@ export class TasksApiService {
       .get<TasksResponseDto>(`${this.baseUrl}/api/tasks`, { params })
       .pipe(map(response => response.groups.map(toTaskGroup)));
   }
+
+  get(id: string): Observable<TaskDetail> {
+    return this.http
+      .get<TaskDetailWireDto>(`${this.baseUrl}/api/tasks/${id}`)
+      .pipe(map(toTaskDetail));
+  }
 }
 
 function toTaskGroup(g: TaskGroupDto): TaskGroup {
@@ -122,5 +174,51 @@ function toTaskAction(a: TaskActionDto): TaskAction {
     primary: a.primary || undefined,
     destructive: a.destructive || undefined,
     href: a.href ?? undefined,
+  };
+}
+
+function toTaskDetail(d: TaskDetailWireDto): TaskDetail {
+  return {
+    id: d.id,
+    type: d.type as TaskType,
+    typeLabel: d.typeLabel,
+    accent: d.accent as TaskAccent,
+    timeContext: d.timeContext,
+    title: d.title,
+    subtitle: d.subtitle ?? undefined,
+    customer: d.customer ? toTaskCustomer(d.customer) : undefined,
+    actions: d.actions.map(toTaskRowAction),
+    note: d.note ? toTaskNote(d.note) : null,
+    primaryCta: toTaskAction(d.primaryCta),
+    entityRef: { module: d.entityRef.module, id: d.entityRef.id },
+  };
+}
+
+function toTaskCustomer(c: TaskCustomerWireDto): TaskCustomer {
+  return {
+    id: c.id,
+    name: c.name,
+    initials: c.initials,
+    phone: c.phone ?? undefined,
+    email: c.email ?? undefined,
+  };
+}
+
+function toTaskRowAction(a: TaskRowActionWireDto): TaskRowAction {
+  return {
+    id: a.id,
+    label: a.label,
+    kind: a.kind as TaskRowActionKind,
+    destructive: a.destructive || undefined,
+    confirm: a.confirm ?? undefined,
+    href: a.href ?? undefined,
+  };
+}
+
+function toTaskNote(n: TaskNoteWireDto): TaskNote {
+  return {
+    id: n.id,
+    body: n.body,
+    updatedAt: n.updatedAt,
   };
 }

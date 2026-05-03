@@ -367,6 +367,28 @@ app.MapGet("/api/tasks", async (
                  "across the XAF entity sources listed in BACKEND.md §2.")
     .RequireAuthorization(AccessAsUserPolicy);
 
+app.MapGet("/api/tasks/{id}", async (
+        string id,
+        ClaimsPrincipal user,
+        ITaskQueryService service,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return Results.BadRequest();
+        }
+
+        var detail = await service.GetAsync(user, id, ct);
+        return detail is null
+            ? Results.NotFound()
+            : Results.Ok(detail);
+    })
+    .WithName("GetTaskById")
+    .WithSummary("Returns the full task detail for the given id. Phase 1 looks the " +
+                 "row up in the mock fixture; Phase 2 will resolve the XAF entity " +
+                 "via the row's EntityRef.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
 try
 {
     Log.Information("Lumo mVasu API starting (version {Version})", version);

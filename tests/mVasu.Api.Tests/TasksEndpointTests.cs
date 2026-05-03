@@ -143,6 +143,89 @@ public class TasksEndpointTests : IClassFixture<AuthenticatedWebApplicationFacto
         Assert.Equal("Mannerheimintie 12 A 4", body.Groups[0].Tasks[0].Title);
     }
 
+    // -- GET /api/tasks/{id} ---------------------------------------------------
+
+    [Fact]
+    public async Task GetById_WithoutToken_Returns401()
+    {
+        var client = WithMock(new RecordingService()).CreateClient();
+
+        var response = await client.GetAsync("/api/tasks/abc-123");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetById_NotFound_Returns404()
+    {
+        var mock = new RecordingService { DetailResult = null };
+        var client = WithMock(mock).CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "mikko.nieminen@kojamo.fi");
+
+        var response = await client.GetAsync("/api/tasks/does-not-exist");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("does-not-exist", mock.LastDetailId);
+    }
+
+    [Fact]
+    public async Task GetById_ReturnsPayloadShape()
+    {
+        var mock = new RecordingService
+        {
+            DetailResult = new TaskDetailDto(
+                Id: "mock-1",
+                Type: TaskTypeNames.VisitIntroduction,
+                TypeLabel: "Tutustumiskäynti",
+                Accent: TaskAccents.Navy,
+                TimeContext: "Tänään klo 10:30 · Kesto 30 min",
+                Title: "Mannerheimintie 12 A 4",
+                Subtitle: "Esittelijä Esittelijä_A",
+                Customer: new TaskCustomerDto(
+                    Id: "customer-mock-1",
+                    Name: "Asiakas_002",
+                    Initials: "A",
+                    Phone: "044 PLACEHOLDER",
+                    Email: null),
+                Actions:
+                [
+                    new TaskRowActionDto(
+                        Id: "navigate-unit",
+                        Label: "Avaa kohde Lumo Verkossa",
+                        Kind: TaskRowActionKinds.External,
+                        Destructive: false,
+                        Confirm: null,
+                        Href: "https://www.lumo.fi/"),
+                ],
+                Note: new TaskNoteDto(
+                    Id: "note-mock-1",
+                    Body: "Asiakas on muuttamassa pääkaupunkiseudulle.",
+                    UpdatedAt: DateTimeOffset.UtcNow),
+                PrimaryCta: new TaskActionDto(
+                    Kind: TaskActionKinds.Navigate,
+                    Label: "Avaa kohde",
+                    Primary: true,
+                    Destructive: false,
+                    Href: null),
+                EntityRef: new TaskEntityRefDto("core", "Tutustumiskaynti", "x-1")),
+        };
+        var client = WithMock(mock).CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "mikko.nieminen@kojamo.fi");
+
+        var response = await client.GetAsync("/api/tasks/mock-1");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<TaskDetailDto>();
+        Assert.NotNull(body);
+        Assert.Equal("mock-1", body!.Id);
+        Assert.Equal("Tutustumiskäynti", body.TypeLabel);
+        Assert.Equal("Mannerheimintie 12 A 4", body.Title);
+        Assert.NotNull(body.Customer);
+        Assert.Equal("Asiakas_002", body.Customer!.Name);
+        Assert.Single(body.Actions);
+        Assert.Equal(TaskRowActionKinds.External, body.Actions[0].Kind);
+    }
+
     private static TasksResponseDto Empty() =>
         new(Array.Empty<TaskGroupDto>(), 0, DateTimeOffset.UtcNow);
 
@@ -160,7 +243,10 @@ public class TasksEndpointTests : IClassFixture<AuthenticatedWebApplicationFacto
         public TasksResponseDto Result { get; set; } =
             new(Array.Empty<TaskGroupDto>(), 0, DateTimeOffset.UtcNow);
 
+        public TaskDetailDto? DetailResult { get; set; }
+
         public TaskQueryParameters? LastQuery { get; private set; }
+        public string? LastDetailId { get; private set; }
 
         public Task<TasksResponseDto> ListAsync(
             ClaimsPrincipal principal,
@@ -169,6 +255,15 @@ public class TasksEndpointTests : IClassFixture<AuthenticatedWebApplicationFacto
         {
             LastQuery = query;
             return Task.FromResult(Result);
+        }
+
+        public Task<TaskDetailDto?> GetAsync(
+            ClaimsPrincipal principal,
+            string id,
+            CancellationToken cancellationToken = default)
+        {
+            LastDetailId = id;
+            return Task.FromResult(DetailResult);
         }
     }
 }
