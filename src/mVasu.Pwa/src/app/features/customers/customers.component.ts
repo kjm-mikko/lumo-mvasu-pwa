@@ -1,19 +1,33 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   inject,
   signal,
 } from '@angular/core';
 import { Router } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { Subject, debounceTime, distinctUntilChanged, map, startWith } from 'rxjs';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import {
+  BehaviorSubject,
+  Subject,
+  catchError,
+  combineLatest,
+  debounceTime,
+  distinctUntilChanged,
+  map,
+  of,
+  startWith,
+  switchMap,
+  tap,
+} from 'rxjs';
 import { DxButtonModule } from 'devextreme-angular/ui/button';
 import { DxListModule } from 'devextreme-angular/ui/list';
 import { DxPopupModule } from 'devextreme-angular/ui/popup';
 import { DxTextBoxModule } from 'devextreme-angular/ui/text-box';
 import { DxToastModule } from 'devextreme-angular/ui/toast';
 
+import { CustomersApiService } from '../../core/services/customers-api.service';
 import { CustomersService } from '../../core/services/customers.service';
 import {
   CUSTOMER_RELATION_LABELS,
@@ -302,6 +316,8 @@ interface CountPill {
 })
 export class CustomersComponent {
   private readonly customersService = inject(CustomersService);
+  private readonly api = inject(CustomersApiService);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
 
   protected readonly typeOptions = TYPE_OPTIONS;
@@ -313,7 +329,13 @@ export class CustomersComponent {
   protected readonly filterSheetVisible = signal<boolean>(false);
   protected readonly toast = signal<ToastState>(TOAST_HIDDEN);
 
+  protected readonly customers = signal<ReadonlyArray<Customer>>([]);
+  protected readonly loading = signal<boolean>(false);
+  protected readonly loadError = signal<string | null>(null);
+
   private readonly query$ = new Subject<string>();
+  private readonly filters$ = new BehaviorSubject<CustomerFilters>({});
+
   protected readonly debouncedQuery = toSignal(
     this.query$.pipe(
       startWith(''),
@@ -324,9 +346,6 @@ export class CustomersComponent {
     { initialValue: '' },
   );
 
-  protected readonly customers = computed<ReadonlyArray<Customer>>(() =>
-    this.customersService.list(this.debouncedQuery(), this.filters()),
-  );
   protected readonly customersData = computed<Customer[]>(() => [...this.customers()]);
 
   protected readonly recentCustomers = computed<ReadonlyArray<Customer>>(() =>
@@ -343,6 +362,40 @@ export class CustomersComponent {
     const f = this.filters();
     return !!f.type || !!f.relation || !!f.city;
   });
+
+  constructor() {
+    // Combined query + filters → debounced HTTP fetch with switchMap so
+    // rapid edits cancel the previous request. Errors land in loadError
+    // and the customers signal stays as the previous successful page.
+    combineLatest([
+      this.query$.pipe(startWith('')),
+      this.filters$,
+    ])
+      .pipe(
+        debounceTime(DEBOUNCE_MS),
+        distinctUntilChanged((a, b) =>
+          a[0] === b[0] &&
+          a[1].type === b[1].type &&
+          a[1].relation === b[1].relation &&
+          a[1].city === b[1].city,
+        ),
+        tap(() => { this.loading.set(true); this.loadError.set(null); }),
+        switchMap(([q, f]) =>
+          this.api.list(q, f).pipe(
+            catchError((err) => {
+              console.error('[Customers] /api/customers failed', err);
+              this.loadError.set('Asiakkaita ei voitu ladata.');
+              return of([] as ReadonlyArray<Customer>);
+            }),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((list) => {
+        this.customers.set(list);
+        this.loading.set(false);
+      });
+  }
 
   protected onValue(event: { value?: string | null }): void {
     const next = event.value ?? '';
@@ -365,18 +418,26 @@ export class CustomersComponent {
   protected closeFilterSheet(): void { this.filterSheetVisible.set(false); }
 
   protected setType(type: CustomerType | undefined): void {
-    this.filters.update(f => ({ ...f, type }));
+    this.updateFilters(f => ({ ...f, type }));
   }
   protected setRelation(relation: CustomerRelationFilter | undefined): void {
-    this.filters.update(f => ({ ...f, relation }));
+    this.updateFilters(f => ({ ...f, relation }));
   }
   protected setCity(city: string | undefined): void {
-    this.filters.update(f => ({ ...f, city }));
+    this.updateFilters(f => ({ ...f, city }));
   }
-  protected clearType(): void { this.filters.update(f => ({ ...f, type: undefined })); }
-  protected clearRelation(): void { this.filters.update(f => ({ ...f, relation: undefined })); }
-  protected clearCity(): void { this.filters.update(f => ({ ...f, city: undefined })); }
-  protected clearAllFilters(): void { this.filters.set({}); }
+  protected clearType(): void     { this.updateFilters(f => ({ ...f, type: undefined })); }
+  protected clearRelation(): void { this.updateFilters(f => ({ ...f, relation: undefined })); }
+  protected clearCity(): void     { this.updateFilters(f => ({ ...f, city: undefined })); }
+  protected clearAllFilters(): void {
+    this.filters.set({});
+    this.filters$.next({});
+  }
+
+  private updateFilters(producer: (current: CustomerFilters) => CustomerFilters): void {
+    this.filters.update(producer);
+    this.filters$.next(this.filters());
+  }
 
   protected newCustomer(): void {
     this.flash('Uuden asiakkaan lisäys tulossa', 'info');

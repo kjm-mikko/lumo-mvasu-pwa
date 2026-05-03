@@ -5,6 +5,7 @@ using Microsoft.Identity.Web;
 using mVasu.Api.Authentication;
 using mVasu.Api.Contracts;
 using mVasu.Api.Data;
+using mVasu.Api.Customers;
 using mVasu.Api.Tasks;
 using mVasu.Api.Tiskilista;
 using Scalar.AspNetCore;
@@ -57,6 +58,7 @@ builder.Services.AddScoped<IUserResolver, XpoEmailUserResolver>();
 builder.Services.AddScoped<IUserSettingsService, XpoUserSettingsService>();
 builder.Services.AddScoped<ITiskilistaQueryService, TiskilistaQueryService>();
 builder.Services.AddScoped<ITaskQueryService, TaskQueryService>();
+builder.Services.AddScoped<ICustomerQueryService, CustomerQueryService>();
 
 builder.Services.AddVasuXpo(builder.Configuration);
 
@@ -387,6 +389,49 @@ app.MapGet("/api/tasks/{id}", async (
     .WithSummary("Returns the full task detail for the given id. Phase 1 looks the " +
                  "row up in the mock fixture; Phase 2 will resolve the XAF entity " +
                  "via the row's EntityRef.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/customers", async (
+        ClaimsPrincipal user,
+        ICustomerQueryService service,
+        string? q,
+        string? type,
+        string? relation,
+        string? city,
+        CancellationToken ct) =>
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (!string.IsNullOrWhiteSpace(type) && !CustomerTypes.Valid.Contains(type))
+        {
+            errors[nameof(type)] = [$"type must be one of: {string.Join(", ", CustomerTypes.Valid)}."];
+        }
+
+        if (!string.IsNullOrWhiteSpace(relation) && !CustomerRelationFilters.Valid.Contains(relation))
+        {
+            errors[nameof(relation)] =
+                [$"relation must be one of: {string.Join(", ", CustomerRelationFilters.Valid)}."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.ValidationProblem(errors);
+        }
+
+        var query = new CustomerQueryParameters(
+            Search: q,
+            Type: string.IsNullOrWhiteSpace(type) ? null : type,
+            Relation: string.IsNullOrWhiteSpace(relation) ? null : relation,
+            City: string.IsNullOrWhiteSpace(city) ? null : city);
+
+        var result = await service.ListAsync(user, query, ct);
+        return Results.Ok(result);
+    })
+    .WithName("GetCustomers")
+    .WithSummary("Lists Asiakkaat (Henkilö / Yritys / Yhteyshenkilö) sorted fi-FI " +
+                 "by displayName. Phase 1 returns a mock fixture; Phase 2 projects " +
+                 "from xVasu.Data.Asma.Henkilo / Yritys / Yhteyshenkilo with related-" +
+                 "entity counts (Hakemus, SopimusVaraus, Sopimus, Tarjous, Esittely).")
     .RequireAuthorization(AccessAsUserPolicy);
 
 try
