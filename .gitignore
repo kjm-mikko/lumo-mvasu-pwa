@@ -72,6 +72,19 @@ coverage/
 .env.*.local
 src/environments/environment.local.ts
 
+# DevExtreme license — never commit. The .devextreme/ folder holds the raw
+# LCX key (dx-license.txt) and the build-generated LCP file (license-key.ts);
+# both are local-only. See src/mVasu.Pwa/src/.devextreme/README.md.
+src/mVasu.Pwa/src/.devextreme/dx-license.txt
+src/mVasu.Pwa/src/.devextreme/license-key.ts
+
+# Design handoff zip bundles — extracted contents live under
+# design/handoff_navigation/ which is the source of truth.
+/design_handoff_mvasu_navigation*.zip
+
+# VSCode user-scoped MCP server registrations (per-developer)
+.vscode/mcp.json
+
 # Build artifacts
 *.tgz
 .npm/

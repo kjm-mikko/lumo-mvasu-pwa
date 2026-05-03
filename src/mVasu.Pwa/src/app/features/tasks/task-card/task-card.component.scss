@@ -1,0 +1,98 @@
+// Card container styles live in design/lumo-devextreme-overrides.scss
+// (.lumo-task-card, .lumo-task-card--urgent, accent borders).
+// This file holds layout for the card's internal slots only.
+
+:host { display: block; }
+
+.when {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 2px;
+
+  .time {
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-semibold);
+    font-size: var(--lumo-fs-body);
+    color: var(--lumo-text-primary);
+    line-height: 1.2;
+  }
+  .note {
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-regular);
+    font-size: var(--lumo-fs-caption);
+    color: var(--lumo-text-tertiary);
+    line-height: 1.3;
+  }
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.type-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-sm);
+  min-height: 24px;
+}
+
+.type-label {
+  font-family: var(--lumo-font-body);
+  font-size: var(--lumo-fs-caption);
+  font-weight: var(--lumo-fw-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--lumo-text-secondary);
+
+  .lumo-task-card[data-accent='cta']  & { color: var(--lumo-cta); }
+  .lumo-task-card[data-accent='info'] & { color: var(--lumo-info); }
+  .lumo-task-card[data-accent='warn'] & { color: var(--lumo-warning); }
+  .lumo-task-card[data-accent='navy'] & { color: var(--lumo-primary); }
+}
+
+.urgent-pill {
+  padding: 2px var(--lumo-space-sm);
+  border-radius: var(--lumo-radius-full);
+  background: var(--lumo-cta-subtle);
+  color: var(--lumo-cta);
+  font-family: var(--lumo-font-body);
+  font-size: 10px;
+  font-weight: var(--lumo-fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+}
+
+.kebab {
+  margin-left: auto;
+}
+
+.title {
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-medium);
+  font-size: var(--lumo-fs-body);
+  line-height: 1.3;
+  color: var(--lumo-text-primary);
+  margin: 2px 0 0;
+}
+
+.who, .meta {
+  margin: 0;
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-regular);
+  line-height: 1.4;
+}
+
+.who { font-size: var(--lumo-fs-small); color: var(--lumo-text-secondary); }
+.meta { font-size: 12px; color: var(--lumo-text-tertiary); }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lumo-space-sm);
+  margin-top: var(--lumo-space-sm);
+}

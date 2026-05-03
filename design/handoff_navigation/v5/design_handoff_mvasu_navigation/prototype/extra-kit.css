@@ -1,0 +1,105 @@
+/* Lisänäkymien tyylit — Liidit, Verkkokauppa, Irtisanomiset, Tarjoukset, Allekirjoitettavat, Remontit, Henkilö-detail */
+
+/* === Yhteinen "uusi" kortin korostus (perustuu xafml:n keltaiseen taustaan) === */
+.liidi-card.uusi, .vk-card.uusi, .irti-card.uusi { background: #fffbeb; border-color: #f3e3a8; }
+
+/* === Tila-pilli yleiskäyttö === */
+.tila-pill { font: 500 10.5px 'Inter', sans-serif; padding: 3px 8px; border-radius: 9999px; display: inline-flex; align-items: center; gap: 3px; }
+.tila-pill.uusi { background: #fef3c7; color: #854d0e; }
+.tila-pill.progress { background: #e6ecf5; color: #002663; }
+.tila-pill.done { background: #d8eef1; color: #1c808f; }
+.tila-pill.warn { background: #fdedf4; color: #ca2774; }
+.tila-pill.planned { background: #eef2f7; color: #64748b; }
+
+/* === Liidi-kortti === */
+.liidi-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.lc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.lc-name { flex: 1; font: 600 15px 'Playfair Display', serif; color: #0f172a; }
+.lc-meta { font: 400 13px 'Inter', sans-serif; color: #475569; margin-bottom: 8px; }
+.lc-foot { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.lc-hn { font: 400 11px 'Inter', sans-serif; color: #94a3b8; margin-left: auto; font-variant-numeric: tabular-nums; }
+.lc-kontakti { font: 400 11px 'Inter', sans-serif; color: #64748b; margin-top: 6px; padding-top: 6px; border-top: 1px solid #f1f5f9; }
+.lc-kontakti.emp { color: #ca2774; }
+
+/* === Info-banner === */
+.info-banner { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #fef9fc; border: 1px solid #f8d4e7; color: #ca2774; border-radius: 12px; margin-bottom: 12px; font: 400 12px 'Inter', sans-serif; }
+.info-banner svg { color: #ca2774; flex-shrink: 0; }
+.info-banner strong { color: #ca2774; font-weight: 600; }
+
+/* === Verkkokauppa-kortti === */
+.vk-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.vk-head { display: flex; align-items: center; gap: 8px; }
+.vk-osoite { flex: 1; font: 600 15px 'Playfair Display', serif; color: #0f172a; }
+.vk-kunta { font: 400 12px 'Inter', sans-serif; color: #94a3b8; margin-bottom: 8px; }
+.vk-row { display: flex; justify-content: space-between; padding: 4px 0; font: 400 13px 'Inter', sans-serif; }
+.vk-label { color: #64748b; }
+.vk-val { color: #0f172a; font-weight: 500; }
+.vk-foot { display: flex; gap: 6px; align-items: center; padding-top: 8px; margin-top: 6px; border-top: 1px solid #f1f5f9; }
+.vk-sn { margin-left: auto; font: 500 11px 'Inter', sans-serif; color: #94a3b8; font-variant-numeric: tabular-nums; }
+
+/* === Irtisanominen-kortti === */
+.irti-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.irti-head { display: flex; align-items: flex-start; gap: 8px; }
+.irti-osoite { font: 600 15px 'Playfair Display', serif; color: #0f172a; }
+.irti-kunta { font: 400 12px 'Inter', sans-serif; color: #94a3b8; }
+.irti-vuokr { font: 500 14px 'Inter', sans-serif; color: #0f172a; margin: 8px 0 4px; }
+.irti-syy { font: 400 13px 'Inter', sans-serif; color: #64748b; font-style: italic; margin-bottom: 10px; }
+.irti-foot { display: flex; gap: 12px; align-items: center; padding-top: 8px; border-top: 1px solid #f1f5f9; }
+.irti-times { display: flex; gap: 16px; flex: 1; }
+.irti-times > div { display: flex; flex-direction: column; gap: 1px; }
+.irti-tlabel { font: 500 10px 'Inter', sans-serif; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; }
+.irti-tval { font: 500 12px 'Inter', sans-serif; color: #0f172a; }
+
+/* === Tarjous-kortti === */
+.tarj-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.tarj-card.kiire { border-left: 3px solid #ca2774; padding-left: 11px; }
+.tarj-head { display: flex; align-items: center; gap: 8px; }
+.tarj-osoite { flex: 1; font: 600 15px 'Playfair Display', serif; color: #0f172a; }
+.tarj-meta { font: 400 12px 'Inter', sans-serif; color: #64748b; margin-bottom: 8px; }
+.tarj-row { display: flex; gap: 16px; padding: 6px 0; }
+.tarj-row > div { flex: 1; }
+.tarj-label { display: block; font: 500 10px 'Inter', sans-serif; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1px; }
+.tarj-val { font: 500 13px 'Inter', sans-serif; color: #0f172a; }
+.tarj-deadline { display: flex; align-items: center; gap: 4px; padding-top: 8px; margin-top: 4px; border-top: 1px solid #f1f5f9; font: 400 12px 'Inter', sans-serif; color: #64748b; }
+.tarj-deadline.kiire { color: #ca2774; }
+.tarj-deadline strong { color: #0f172a; font-weight: 600; }
+.tarj-deadline.kiire strong { color: #ca2774; }
+
+/* === Allekirjoitettavat === */
+.allek-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.allek-card.kiire { border-left: 3px solid #1c808f; padding-left: 11px; }
+.allek-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.allek-icon { width: 32px; height: 32px; border-radius: 9999px; background: #d8eef1; color: #1c808f; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.allek-titles { flex: 1; min-width: 0; }
+.allek-tyyppi { font: 500 11px 'Inter', sans-serif; color: #1c808f; text-transform: uppercase; letter-spacing: 0.06em; }
+.allek-osoite { font: 600 14px 'Playfair Display', serif; color: #0f172a; }
+.allek-row { display: flex; gap: 16px; padding: 6px 0; }
+.allek-row > div { flex: 1; }
+.allek-label { display: block; font: 500 10px 'Inter', sans-serif; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1px; }
+.allek-val { font: 500 13px 'Inter', sans-serif; color: #0f172a; }
+.allek-progress { padding: 8px 0; }
+.ap-bar { height: 4px; background: #eef2f7; border-radius: 9999px; overflow: hidden; margin-bottom: 4px; }
+.ap-fill { height: 100%; background: #1c808f; border-radius: 9999px; transition: width 0.3s; }
+.ap-label { font: 400 11px 'Inter', sans-serif; color: #64748b; }
+.allek-foot { display: flex; align-items: center; justify-content: space-between; padding-top: 6px; border-top: 1px solid #f1f5f9; gap: 8px; }
+
+/* === Remontit === */
+.rem-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.rem-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.rem-tyyppi { font: 600 14px 'Playfair Display', serif; color: #0f172a; }
+.rem-kohde { font: 400 12px 'Inter', sans-serif; color: #64748b; }
+.rem-row { display: flex; gap: 12px; padding: 6px 0; flex-wrap: wrap; }
+.rem-row > div { flex: 1; min-width: 80px; }
+.rem-label { display: block; font: 500 10px 'Inter', sans-serif; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1px; }
+.rem-val { font: 500 13px 'Inter', sans-serif; color: #0f172a; }
+.rem-progress { display: flex; align-items: center; gap: 8px; padding-top: 8px; margin-top: 4px; border-top: 1px solid #f1f5f9; }
+.rp-bar { flex: 1; height: 6px; background: #eef2f7; border-radius: 9999px; overflow: hidden; }
+.rp-fill { height: 100%; background: #ba7517; border-radius: 9999px; transition: width 0.3s; }
+.rp-label { font: 600 12px 'Inter', sans-serif; color: #ba7517; min-width: 36px; text-align: right; }
+
+/* === Henkilö-detail === */
+.hk-hero { display: flex; align-items: center; gap: 12px; padding: 16px 0 20px; border-bottom: 1px solid #f1f5f9; margin-bottom: 16px; }
+.hk-avatar { width: 56px; height: 56px; border-radius: 9999px; background: #002663; color: #fff; font: 500 16px 'Inter', sans-serif; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.hk-info { flex: 1; min-width: 0; }
+.hk-name { font: 600 22px 'Playfair Display', serif; color: #0f172a; line-height: 1.2; }
+.hk-meta { font: 400 12px 'Inter', sans-serif; color: #64748b; margin-top: 4px; }

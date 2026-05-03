@@ -1,0 +1,296 @@
+/* =========================================================================
+   Lumo Design Tokens — mVasu PWA
+   Source: Lumo Visual Identity Guidelines 2025
+   Version: 0.2.0 (skeleton phase)
+
+   Font loading
+   ------------
+   This file only declares CSS variables. Font files must be loaded
+   separately. Recommended approach for the PWA:
+
+     npm install @fontsource-variable/inter @fontsource-variable/playfair-display
+
+   Then in src/styles.scss (Angular) or main entry CSS:
+
+     @import '@fontsource-variable/inter';
+     @import '@fontsource-variable/playfair-display';
+     @import './assets/styles/lumo-tokens.css';
+
+   Self-hosted via @fontsource-variable means:
+   - Works offline (PWA requirement)
+   - No external CDN dependency
+   - Single variable font file per family covers all weights
+   - SIL Open Font License — no commercial restrictions
+
+   Note: original Lumo brand fonts are Austin (headings) and Graphik (body).
+   Inter and Playfair Display are open-source substitutes used during
+   development. See design/open-decisions.md for the licensing follow-up.
+   ========================================================================= */
+
+/* -------------------------------------------------------------------------
+   Light theme (default)
+   ------------------------------------------------------------------------- */
+:root,
+.theme-light {
+  /* Brand */
+  --lumo-primary:           #002663;
+  --lumo-primary-hover:     #001a45;
+  --lumo-primary-active:    #00133a;
+  --lumo-primary-subtle:    #e6ecf5;
+
+  --lumo-cta:               #ca2774;
+  --lumo-cta-hover:         #a81e60;
+  --lumo-cta-active:        #871650;
+  --lumo-cta-subtle:        #fdedf4;
+
+  /* Supporting palette — feature accents and illustrations only */
+  --lumo-lilac:             #b2a7ff;
+  --lumo-cream:             #fff1e7;
+  --lumo-grass:             #008f58;
+  --lumo-petrol:            #1c808f;
+  --lumo-light-blue:        #abe4f5;
+
+  /* Surfaces */
+  --lumo-bg:                #ffffff;
+  --lumo-surface:           #f8fafc;
+  --lumo-surface-elevated:  #ffffff;
+  --lumo-surface-overlay:   rgba(15, 23, 42, 0.45);
+
+  /* Text */
+  --lumo-text-primary:      #0f172a;
+  --lumo-text-secondary:    #475569;
+  --lumo-text-tertiary:     #94a3b8;
+  --lumo-text-disabled:     #cbd5e1;
+  --lumo-text-on-primary:   #ffffff;
+  --lumo-text-on-cta:       #ffffff;
+
+  /* Borders */
+  --lumo-border:            #e2e8f0;
+  --lumo-border-strong:     #cbd5e1;
+  --lumo-border-focus:      var(--lumo-primary);
+
+  /* Semantic — derived from supporting palette where possible */
+  --lumo-success:           #008f58;
+  --lumo-success-subtle:    #e1f5ee;
+  --lumo-warning:           #ba7517;
+  --lumo-warning-subtle:    #faeeda;
+  --lumo-danger:            #a32d2d;
+  --lumo-danger-subtle:     #fcebeb;
+  --lumo-info:              #1c808f;
+  --lumo-info-subtle:       #d8eef1;
+
+  /* Focus rings */
+  --lumo-focus-ring:        rgba(0, 38, 99, 0.20);
+  --lumo-focus-ring-cta:    rgba(202, 39, 116, 0.20);
+}
+
+/* -------------------------------------------------------------------------
+   Dark theme
+   Calm + premium, no neon. Pure black avoided. Large saturated blue panels
+   are not used — primary blue is lifted to an accent role.
+   ------------------------------------------------------------------------- */
+.theme-dark {
+  --lumo-primary:           #5b88d5;
+  --lumo-primary-hover:     #7aa1de;
+  --lumo-primary-active:    #4071c2;
+  --lumo-primary-subtle:    #1a2a4a;
+
+  --lumo-cta:               #d63f88;
+  --lumo-cta-hover:         #e25aa0;
+  --lumo-cta-active:        #b8316f;
+  --lumo-cta-subtle:        #3a1a2c;
+
+  --lumo-lilac:             #c5bcff;
+  --lumo-cream:             #3d342a;
+  --lumo-grass:             #10a96b;
+  --lumo-petrol:            #2da4b6;
+  --lumo-light-blue:        #6cc5dd;
+
+  --lumo-bg:                #0a1428;
+  --lumo-surface:           #11203c;
+  --lumo-surface-elevated:  #182d52;
+  --lumo-surface-overlay:   rgba(0, 0, 0, 0.55);
+
+  --lumo-text-primary:      #f1f5f9;
+  --lumo-text-secondary:    #b0b9c7;
+  --lumo-text-tertiary:     #6f7b8e;
+  --lumo-text-disabled:     #475569;
+  --lumo-text-on-primary:   #ffffff;
+  --lumo-text-on-cta:       #ffffff;
+
+  --lumo-border:            #1e3559;
+  --lumo-border-strong:     #2d4675;
+  --lumo-border-focus:      var(--lumo-primary);
+
+  --lumo-success:           #10a96b;
+  --lumo-success-subtle:    #0f3a2a;
+  --lumo-warning:           #e09b30;
+  --lumo-warning-subtle:    #3d2e15;
+  --lumo-danger:            #c44848;
+  --lumo-danger-subtle:     #3a1c1c;
+  --lumo-info:              #2da4b6;
+  --lumo-info-subtle:       #143a40;
+
+  --lumo-focus-ring:        rgba(91, 136, 213, 0.30);
+  --lumo-focus-ring-cta:    rgba(214, 63, 136, 0.30);
+}
+
+/* -------------------------------------------------------------------------
+   System preference fallback — when no explicit .theme-* class is set
+   ------------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not(.theme-light):not(.theme-dark) {
+    --lumo-primary:           #5b88d5;
+    --lumo-primary-hover:     #7aa1de;
+    --lumo-primary-active:    #4071c2;
+    --lumo-primary-subtle:    #1a2a4a;
+    --lumo-cta:               #d63f88;
+    --lumo-cta-hover:         #e25aa0;
+    --lumo-cta-active:        #b8316f;
+    --lumo-cta-subtle:        #3a1a2c;
+    --lumo-bg:                #0a1428;
+    --lumo-surface:           #11203c;
+    --lumo-surface-elevated:  #182d52;
+    --lumo-text-primary:      #f1f5f9;
+    --lumo-text-secondary:    #b0b9c7;
+    --lumo-text-tertiary:     #6f7b8e;
+    --lumo-text-disabled:     #475569;
+    --lumo-border:            #1e3559;
+    --lumo-border-strong:     #2d4675;
+    --lumo-success:           #10a96b;
+    --lumo-warning:           #e09b30;
+    --lumo-danger:            #c44848;
+    --lumo-info:              #2da4b6;
+    --lumo-focus-ring:        rgba(91, 136, 213, 0.30);
+    --lumo-focus-ring-cta:    rgba(214, 63, 136, 0.30);
+  }
+}
+
+/* =========================================================================
+   Typography tokens
+   Playfair Display = headings (open-source serif, substitute for Austin)
+   Inter            = body + CTA (open-source sans, substitute for Graphik)
+
+   Brand rules retained from Lumo Guidelines 2025:
+   - Heading serif not used in CTA buttons
+   - Heading serif not used in slogans
+   - Long headings use the body sans (legibility)
+   - No all-caps headings
+   ========================================================================= */
+:root {
+  --lumo-font-heading:  'Playfair Display Variable', 'Playfair Display',
+                        'Charter', 'Iowan Old Style', Georgia, serif;
+  --lumo-font-body:     'Inter Variable', 'Inter',
+                        -apple-system, BlinkMacSystemFont,
+                        'Segoe UI', system-ui, Arial, sans-serif;
+  --lumo-font-mono:     ui-monospace, SFMono-Regular, 'Cascadia Mono',
+                        Consolas, 'Roboto Mono', monospace;
+
+  /* Inter benefits from these OpenType features */
+  --lumo-font-features: "cv02", "cv03", "cv04", "cv11", "ss01";
+
+  /* Type scale */
+  --lumo-fs-display:    32px;
+  --lumo-fs-h1:         22px;
+  --lumo-fs-h2:         18px;
+  --lumo-fs-h3:         16px;
+  --lumo-fs-body:       15px;
+  --lumo-fs-small:      13px;
+  --lumo-fs-caption:    11px;
+
+  --lumo-lh-tight:      1.15;
+  --lumo-lh-heading:    1.30;
+  --lumo-lh-body:       1.55;
+
+  --lumo-fw-regular:    400;
+  --lumo-fw-medium:     500;
+  --lumo-fw-semibold:   600;   /* reserved for Playfair Display headings only */
+}
+
+/* =========================================================================
+   Layout tokens
+   ========================================================================= */
+:root {
+  /* Spacing — 4px base unit */
+  --lumo-space-xs:      4px;
+  --lumo-space-sm:      8px;
+  --lumo-space-md:      12px;
+  --lumo-space-lg:      16px;
+  --lumo-space-xl:      24px;
+  --lumo-space-2xl:     32px;
+  --lumo-space-3xl:     48px;
+  --lumo-space-4xl:     64px;
+
+  /* Border radius */
+  --lumo-radius-sm:     4px;
+  --lumo-radius-md:     6px;
+  --lumo-radius-lg:     8px;
+  --lumo-radius-xl:     12px;
+  --lumo-radius-2xl:    16px;
+  --lumo-radius-full:   9999px;
+
+  /* Touch targets — mobile-first */
+  --lumo-touch-target:  44px;
+
+  /* Z-index scale */
+  --lumo-z-dropdown:    1000;
+  --lumo-z-sticky:      1100;
+  --lumo-z-modal:       1300;
+  --lumo-z-toast:       1400;
+
+  /* Motion */
+  --lumo-duration-fast: 120ms;
+  --lumo-duration-base: 200ms;
+  --lumo-duration-slow: 320ms;
+  --lumo-easing:        cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* =========================================================================
+   Elevation — subtle, no glow
+   ========================================================================= */
+.theme-light, :root {
+  --lumo-shadow-sm:  0 1px 2px rgba(15, 23, 42, 0.04);
+  --lumo-shadow-md:  0 2px 8px rgba(15, 23, 42, 0.06),
+                     0 1px 2px rgba(15, 23, 42, 0.04);
+  --lumo-shadow-lg:  0 8px 24px rgba(15, 23, 42, 0.08),
+                     0 2px 4px rgba(15, 23, 42, 0.04);
+}
+.theme-dark {
+  --lumo-shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.30);
+  --lumo-shadow-md:  0 2px 8px rgba(0, 0, 0, 0.35),
+                     0 1px 2px rgba(0, 0, 0, 0.30);
+  --lumo-shadow-lg:  0 8px 24px rgba(0, 0, 0, 0.45),
+                     0 2px 4px rgba(0, 0, 0, 0.30);
+}
+
+/* =========================================================================
+   Base body settings — apply Inter font features and smooth rendering
+   ========================================================================= */
+body {
+  font-family: var(--lumo-font-body);
+  font-feature-settings: var(--lumo-font-features);
+  font-size: var(--lumo-fs-body);
+  line-height: var(--lumo-lh-body);
+  color: var(--lumo-text-primary);
+  background: var(--lumo-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--lumo-font-heading);
+  color: var(--lumo-text-primary);
+  font-weight: var(--lumo-fw-semibold);
+  line-height: var(--lumo-lh-heading);
+  margin: 0;
+}
+
+h1 { font-size: var(--lumo-fs-h1); }
+h2 { font-size: var(--lumo-fs-h2); }
+h3 { font-size: var(--lumo-fs-h3); }
+
+/* Long headings → switch to body sans (Lumo rule) */
+h1.long, h2.long, h3.long {
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-medium);
+}

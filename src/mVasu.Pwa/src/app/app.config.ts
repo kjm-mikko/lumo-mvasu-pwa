@@ -3,7 +3,14 @@ import {
   provideZoneChangeDetection,
   isDevMode,
 } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import {
+  provideRouter,
+  withComponentInputBinding,
+  withInMemoryScrolling,
+  withRouterConfig,
+  RouteReuseStrategy,
+} from '@angular/router';
+import { LumoRouteReuseStrategy } from './core/routing/lumo-route-reuse-strategy';
 import { provideServiceWorker } from '@angular/service-worker';
 import {
   HTTP_INTERCEPTORS,
@@ -83,7 +90,13 @@ function msalInterceptorConfigFactory(): MsalInterceptorConfiguration {
 export const appConfig: ApplicationConfig = {
   providers: [
     provideZoneChangeDetection({ eventCoalescing: true }),
-    provideRouter(routes),
+    provideRouter(
+      routes,
+      withInMemoryScrolling({ scrollPositionRestoration: 'enabled', anchorScrolling: 'enabled' }),
+      withRouterConfig({ paramsInheritanceStrategy: 'always' }),
+      withComponentInputBinding(),
+    ),
+    { provide: RouteReuseStrategy, useClass: LumoRouteReuseStrategy },
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
       registrationStrategy: 'registerWhenStable:30000',

@@ -289,6 +289,427 @@
 
 
 // -----------------------------------------------------------------------------
+// Task queue — dx-list (.lumo-task-list) + lumo-task-card
+// Spec: design/handoff_navigation/v4/.../SCREENS.md §01 Tehtävät
+// -----------------------------------------------------------------------------
+.lumo-task-list.dx-list {
+  background: transparent;
+  border: 0;
+  padding: var(--lumo-space-md) var(--lumo-space-lg) var(--lumo-space-2xl);
+
+  .dx-empty-message { display: none; }
+
+  .dx-list-group {
+    border: 0;
+    background: transparent;
+  }
+
+  .dx-list-group-header {
+    background: var(--lumo-bg);
+    border: 0;
+    padding: 0;
+    // Sticky inside the dx-list's own scroll viewport (pullRefreshEnabled
+    // gives the list its own scrollable area), so `top: 0` keeps the day
+    // label flush against the list's top edge — i.e. directly below the
+    // page-level topbar — instead of mid-card.
+    position: sticky;
+    top: 0;
+    z-index: calc(var(--lumo-z-sticky) - 1);
+    box-shadow: 0 4px 4px -4px rgba(15, 23, 42, 0.06);
+  }
+
+  .dx-list-group-body {
+    padding: 0;
+    background: transparent;
+  }
+
+  .dx-list-item {
+    background: transparent;
+    border: 0;
+    padding: 0 0 10px;
+    cursor: pointer;
+
+    &::before, &::after { display: none; }
+
+    &.dx-state-hover, &.dx-state-focused {
+      background: transparent;
+    }
+
+    .dx-list-item-content {
+      padding: 0;
+    }
+  }
+}
+
+.lumo-day-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--lumo-space-sm);
+  padding: var(--lumo-space-sm) 0;
+  background: var(--lumo-bg);
+
+  .day {
+    font-family: var(--lumo-font-heading);
+    font-weight: var(--lumo-fw-semibold);
+    font-size: 14px;
+    color: var(--lumo-primary);
+  }
+  .date {
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-regular);
+    font-size: var(--lumo-fs-small);
+    color: var(--lumo-text-secondary);
+  }
+  .count {
+    margin-left: auto;
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: var(--lumo-fs-caption);
+    color: var(--lumo-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+}
+
+.lumo-task-card {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: var(--lumo-space-md);
+  padding: 14px;
+  background: var(--lumo-surface-elevated);
+  border: 1px solid var(--lumo-border);
+  border-left: 3px solid var(--lumo-primary);
+  border-radius: var(--lumo-radius-xl);
+  box-shadow: var(--lumo-shadow-sm);
+  transition: transform var(--lumo-duration-fast) var(--lumo-easing),
+              box-shadow var(--lumo-duration-fast) var(--lumo-easing);
+
+  &[data-accent='cta']  { border-left-color: var(--lumo-cta); }
+  &[data-accent='info'] { border-left-color: var(--lumo-info); }
+  &[data-accent='warn'] { border-left-color: var(--lumo-warning); }
+  &[data-accent='navy'] { border-left-color: var(--lumo-primary); }
+
+  &--urgent { background: var(--lumo-cta-subtle); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lumo-task-card { transition-duration: 0.01ms; }
+}
+
+// dx-button as inline action button — keep size compact (Lumo card spec ≥32px),
+// override the global mobile 48px floor that the buttons section sets above.
+.lumo-task-card .action-btn.dx-button {
+  min-height: 32px;
+
+  .dx-button-content { padding: 6px var(--lumo-space-md); }
+  .dx-button-text {
+    font-size: var(--lumo-fs-small);
+    font-weight: var(--lumo-fw-medium);
+  }
+}
+
+// More tab — XAF module groups (ASMA / KIRE) + app settings list-groups.
+// Spec: design/handoff_navigation/v5/.../SCREENS.md §03, NAVIGATION.md §4b.
+//
+// Row-template styles (.more-row and its children) live here, NOT in
+// more.component.scss, because dx-list's *dxTemplate renders content
+// through DevExtreme's own mechanism that bypasses Angular's emulated
+// encapsulation attributes — a component-scoped rule like `.row-count`
+// would not apply, and DevExtreme's bright Material-blue default badge
+// would win.
+.lumo-more-list.dx-list {
+  background: var(--lumo-surface-elevated);
+  border: 1px solid var(--lumo-border);
+  border-radius: var(--lumo-radius-xl);
+  overflow: hidden;
+
+  .dx-empty-message { display: none; }
+
+  .dx-list-item {
+    border-bottom: 1px solid var(--lumo-border);
+    cursor: pointer;
+
+    &:last-child { border-bottom: 0; }
+
+    .dx-list-item-content { padding: 0; }
+
+    &.dx-state-hover { background: var(--lumo-primary-subtle); }
+    &.dx-state-focused { background: var(--lumo-primary-subtle); }
+  }
+
+  .more-row {
+    display: flex;
+    align-items: center;
+    gap: var(--lumo-space-md);
+    padding: 12px 14px;
+    min-height: 48px;
+    cursor: pointer;
+  }
+
+  .more-row .row-icon {
+    color: var(--lumo-text-secondary);
+    font-size: 18px;
+    flex: 0 0 auto;
+  }
+
+  .more-row .row-label {
+    flex: 1;
+    font-family: var(--lumo-font-body);
+    font-size: var(--lumo-fs-body);
+    color: var(--lumo-text-primary);
+  }
+
+  .more-row .row-value,
+  .more-row .row-hint {
+    font-family: var(--lumo-font-body);
+    font-size: var(--lumo-fs-small);
+    color: var(--lumo-text-secondary);
+  }
+
+  .more-row .row-count {
+    padding: 2px var(--lumo-space-sm);
+    border-radius: var(--lumo-radius-full);
+    background: var(--lumo-primary-subtle);
+    color: var(--lumo-primary);
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: 11px;
+    line-height: 1.4;
+    min-width: 24px;
+    text-align: center;
+  }
+
+  .more-row .row-chev {
+    color: var(--lumo-text-tertiary);
+    font-size: 16px;
+    flex: 0 0 auto;
+  }
+
+  .more-row--disabled {
+    cursor: default;
+
+    .row-label, .row-value { color: var(--lumo-text-tertiary); }
+  }
+}
+
+
+// Home hub — dx-accordion with title bar + tile grid body.
+// Spec: design/handoff_navigation/v5/.../SCREENS.md §06, prototype
+// screens.jsx HomeHubScreen lines 577–647. Title-row and tile-grid
+// styles live here (not in home-hub.component.scss) because they
+// render inside dx-accordion's *dxTemplate, bypassing Angular's
+// emulated CSS encapsulation.
+.lumo-hub-accordion.dx-accordion {
+  background: transparent;
+  border: 0;
+  padding: var(--lumo-space-md) var(--lumo-space-lg) 0;
+
+  .dx-accordion-item {
+    background: var(--lumo-surface-elevated);
+    border: 1px solid var(--lumo-border);
+    border-radius: var(--lumo-radius-xl);
+    margin-bottom: var(--lumo-space-md);
+    overflow: hidden;
+  }
+
+  .dx-accordion-item-title {
+    padding: 14px var(--lumo-space-md);
+    background: var(--lumo-surface-elevated);
+    border: 0;
+
+    &::before, &::after { display: none; }
+  }
+
+  .dx-accordion-item-body {
+    padding: 0 var(--lumo-space-md) var(--lumo-space-md);
+    background: var(--lumo-surface-elevated);
+    border: 0;
+  }
+
+  .hub-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--lumo-space-md);
+    width: 100%;
+  }
+
+  .hub-title-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hub-title-label {
+    font-family: var(--lumo-font-heading);
+    font-weight: var(--lumo-fw-semibold);
+    font-size: var(--lumo-fs-h3);
+    color: var(--lumo-text-primary);
+  }
+
+  .hub-title-sub {
+    font-family: var(--lumo-font-body);
+    font-size: 12px;
+    color: var(--lumo-text-secondary);
+  }
+
+  .hub-title-count {
+    padding: 2px var(--lumo-space-sm);
+    border-radius: var(--lumo-radius-full);
+    background: var(--lumo-primary-subtle);
+    color: var(--lumo-primary);
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .hub-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--lumo-space-sm);
+
+    @media (min-width: 480px) {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    @media (min-width: 768px) {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  .hub-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    min-height: 96px;
+    padding: var(--lumo-space-md);
+    background: var(--lumo-surface);
+    border: 1px solid var(--lumo-border);
+    border-radius: var(--lumo-radius-lg);
+    color: var(--lumo-text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition:
+      transform var(--lumo-duration-fast) var(--lumo-easing),
+      background var(--lumo-duration-fast) var(--lumo-easing),
+      border-color var(--lumo-duration-fast) var(--lumo-easing);
+
+    &:hover {
+      background: var(--lumo-primary-subtle);
+      border-color: var(--lumo-primary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--lumo-focus-ring);
+      outline-offset: 2px;
+    }
+
+    &:active { transform: translateY(1px); }
+
+    &[data-accent='cta']  { border-left: 3px solid var(--lumo-cta); }
+    &[data-accent='warn'] { border-left: 3px solid var(--lumo-warning); }
+    &[data-accent='info'] { border-left: 3px solid var(--lumo-info); }
+    &[data-accent='navy'] { border-left: 3px solid var(--lumo-primary); }
+  }
+
+  .hub-tile-icon {
+    font-size: 22px;
+    color: var(--lumo-text-secondary);
+
+    .hub-tile[data-accent='cta']  & { color: var(--lumo-cta); }
+    .hub-tile[data-accent='warn'] & { color: var(--lumo-warning); }
+    .hub-tile[data-accent='info'] & { color: var(--lumo-info); }
+    .hub-tile[data-accent='navy'] & { color: var(--lumo-primary); }
+  }
+
+  .hub-tile-label {
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: var(--lumo-fs-small);
+    color: var(--lumo-text-primary);
+    line-height: 1.3;
+  }
+
+  .hub-tile-count {
+    position: absolute;
+    top: var(--lumo-space-sm);
+    right: var(--lumo-space-sm);
+    padding: 2px var(--lumo-space-sm);
+    border-radius: var(--lumo-radius-full);
+    background: var(--lumo-primary-subtle);
+    color: var(--lumo-primary);
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: 11px;
+    line-height: 1.4;
+
+    .hub-tile[data-accent='cta']  & {
+      background: var(--lumo-cta-subtle);
+      color: var(--lumo-cta);
+    }
+    .hub-tile[data-accent='warn'] & {
+      background: var(--lumo-warning-subtle);
+      color: var(--lumo-warning);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lumo-hub-accordion.dx-accordion .hub-tile { transition-duration: 0.01ms; }
+}
+
+
+// Task detail — action list, contact list, note text-area
+// Spec: design/handoff_navigation/v5/.../SCREENS.md §04 Tehtävän tarkka näkymä
+.lumo-action-list.dx-list,
+.lumo-contact-list.dx-list {
+  background: var(--lumo-surface-elevated);
+  border: 1px solid var(--lumo-border);
+  border-radius: var(--lumo-radius-xl);
+  overflow: hidden;
+
+  .dx-empty-message { display: none; }
+
+  .dx-list-item {
+    border-bottom: 1px solid var(--lumo-border);
+
+    &:last-child { border-bottom: 0; }
+
+    .dx-list-item-content { padding: 0; }
+  }
+}
+
+.lumo-action-list.dx-list .dx-list-item {
+  cursor: pointer;
+  &.dx-state-hover { background: var(--lumo-primary-subtle); }
+}
+
+.lumo-contact-list.dx-list .dx-list-item {
+  cursor: default;
+  &.dx-state-hover, &.dx-state-focused { background: transparent; }
+}
+
+.lumo-note.dx-texteditor.dx-editor-outlined {
+  border-radius: var(--lumo-radius-lg);
+  background: var(--lumo-surface);
+  min-height: 80px;
+}
+
+// dx-drop-down-button styled as a kebab — tight square, no chevron arrow
+.lumo-task-card .kebab.dx-dropdownbutton {
+  .dx-button {
+    min-width: 32px;
+    min-height: 32px;
+    border-radius: var(--lumo-radius-full);
+  }
+  .dx-button-content { padding: 4px; }
+  .dx-icon-overflow { font-size: 18px; color: var(--lumo-text-secondary); }
+}
+
+
+// -----------------------------------------------------------------------------
 // Mobile — touch target adjustments
 // -----------------------------------------------------------------------------
 @media (max-width: 600px) {

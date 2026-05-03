@@ -110,6 +110,16 @@
   align-items: center;
   justify-content: center;
   border-bottom: 1px solid var(--lumo-border);
+  color: inherit;
+  text-decoration: none;
+  transition: background var(--lumo-duration-fast) var(--lumo-easing);
+
+  &:hover { background: var(--lumo-surface); }
+
+  &:focus-visible {
+    outline: 2px solid var(--lumo-focus-ring);
+    outline-offset: -2px;
+  }
 }
 
 @media (min-width: 768px) {
