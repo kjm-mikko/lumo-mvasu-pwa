@@ -152,4 +152,30 @@
     background: var(--lumo-primary-subtle);
     color: var(--lumo-primary);
   }
+
+  &--rich {
+    align-items: flex-start;
+    padding: var(--lumo-space-md);
+  }
+}
+
+.picker-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.picker-label {
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-medium);
+  font-size: var(--lumo-fs-body);
+  color: var(--lumo-text-primary);
+}
+
+.picker-hint {
+  font-family: var(--lumo-font-body);
+  font-size: var(--lumo-fs-small);
+  color: var(--lumo-text-secondary);
 }

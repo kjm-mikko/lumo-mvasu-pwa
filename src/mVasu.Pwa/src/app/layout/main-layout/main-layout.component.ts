@@ -1,14 +1,15 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
+import { HomePreferenceService } from '../../core/services/home-preference.service';
 import { WordmarkComponent } from '../../shared/wordmark/wordmark.component';
 
 interface NavItem {
   readonly label: string;
   readonly route?: string;
   readonly disabled: boolean;
-  readonly icon: 'tasks' | 'list' | 'users' | 'more';
+  readonly icon: 'tasks' | 'home' | 'list' | 'users' | 'more';
 }
 
 @Component({
@@ -17,10 +18,15 @@ interface NavItem {
   template: `
     <div class="layout">
       <aside class="sidebar" aria-label="Päänavigaatio">
-        <div class="brand">
+        <a
+          class="brand"
+          routerLink="/"
+          aria-label="Avaa aloitusnäkymä"
+          title="Avaa aloitusnäkymä"
+        >
           <lumo-wordmark size="sm" />
-        </div>
-        @for (item of navItems; track item.label) {
+        </a>
+        @for (item of navItems(); track item.label) {
           @if (item.route && !item.disabled) {
             <a
               class="nav-item"
@@ -49,7 +55,7 @@ interface NavItem {
       </main>
 
       <nav class="tabbar" aria-label="Päänavigaatio (mobiili)">
-        @for (item of navItems; track item.label) {
+        @for (item of navItems(); track item.label) {
           @if (item.route && !item.disabled) {
             <a
               class="tab"
@@ -90,6 +96,10 @@ interface NavItem {
             <path d="M9 11l3 3 7-7" />
             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
           }
+          @case ('home') {
+            <path d="M3 12 12 3l9 9" />
+            <path d="M5 10v10h4v-6h6v6h4V10" />
+          }
           @case ('list') {
             <path d="M8 6h13M8 12h13M8 18h13" />
             <circle cx="3.5" cy="6"  r="1" fill="currentColor" />
@@ -115,10 +125,28 @@ interface NavItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MainLayoutComponent {
-  protected readonly navItems: ReadonlyArray<NavItem> = [
-    { label: 'Tehtävät',  route: '/tasks',    disabled: false, icon: 'tasks' },
-    { label: 'Tiskilista',                    disabled: true,  icon: 'list' },
-    { label: 'Asukkaat',                      disabled: true,  icon: 'users' },
-    { label: 'Lisää',     route: '/more',     disabled: false, icon: 'more' },
-  ];
+  private readonly homePreference = inject(HomePreferenceService);
+
+  /**
+   * First tab swaps with the user's chosen Aloitusnäkymä:
+   * - 'tasks' (default) → "Tehtävät" linking to /tasks
+   * - 'hub'             → "Koti"     linking to /home-hub
+   *
+   * The other tabs (Tiskilista / Asukkaat / Lisää) stay put. The Lumo
+   * wordmark in the sidebar is also a back-stop link to / so a user
+   * navigated away from their preferred home always has at least two
+   * paths back: the dynamic first tab and the brand mark.
+   */
+  protected readonly navItems = computed<ReadonlyArray<NavItem>>(() => {
+    const isHub = this.homePreference.preference() === 'hub';
+    const first: NavItem = isHub
+      ? { label: 'Koti',     route: '/home-hub', disabled: false, icon: 'home' }
+      : { label: 'Tehtävät', route: '/tasks',    disabled: false, icon: 'tasks' };
+    return [
+      first,
+      { label: 'Tiskilista',                    disabled: true,  icon: 'list' },
+      { label: 'Asukkaat',                      disabled: true,  icon: 'users' },
+      { label: 'Lisää',     route: '/more',     disabled: false, icon: 'more' },
+    ];
+  });
 }

@@ -14,6 +14,10 @@ import { DxPopupModule } from 'devextreme-angular/ui/popup';
 import { DxToastModule } from 'devextreme-angular/ui/toast';
 
 import { AuthService } from '../../core/services/auth.service';
+import {
+  HomePreferenceService,
+  type HomePreference,
+} from '../../core/services/home-preference.service';
 import { LocationService } from '../../core/services/location.service';
 import { ThemeService, type LumoTheme } from '../../core/services/theme.service';
 import { UserApiService } from '../../core/services/user-api.service';
@@ -52,6 +56,16 @@ const THEME_OPTIONS: ThemeOption[] = [
   { id: 'light',  label: 'Vaalea' },
   { id: 'dark',   label: 'Tumma' },
   { id: 'system', label: 'Käytä järjestelmäasetusta' },
+];
+
+interface HomeOption {
+  readonly id: HomePreference;
+  readonly label: string;
+  readonly hint: string;
+}
+const HOME_OPTIONS: HomeOption[] = [
+  { id: 'tasks', label: 'Tehtävät', hint: 'Päivän työ aikajärjestyksessä' },
+  { id: 'hub',   label: 'Koti',     hint: 'Moduulit accordionissa (ASMA · KIRE)' },
 ];
 
 const APP_VERSION = 'Lumo mVasu · v0.2.0';
@@ -195,6 +209,35 @@ const APP_VERSION = 'Lumo mVasu · v0.2.0';
       </div>
     </dx-popup>
 
+    <dx-popup
+      [visible]="homePickerVisible()"
+      title="Aloitusnäkymä"
+      [width]="320"
+      [height]="'auto'"
+      [showCloseButton]="true"
+      [hideOnOutsideClick]="true"
+      (onHiding)="closeHomePicker()"
+    >
+      <div *dxTemplate="let _ of 'content'" class="picker-body">
+        @for (opt of homeOptions; track opt.id) {
+          <button
+            type="button"
+            class="picker-option picker-option--rich"
+            [class.picker-option--active]="opt.id === home()"
+            (click)="selectHome(opt.id)"
+          >
+            <span class="picker-text">
+              <span class="picker-label">{{ opt.label }}</span>
+              <span class="picker-hint">{{ opt.hint }}</span>
+            </span>
+            @if (opt.id === home()) {
+              <i class="dx-icon dx-icon-check" aria-hidden="true"></i>
+            }
+          </button>
+        }
+      </div>
+    </dx-popup>
+
     <dx-toast
       [visible]="toast().visible"
       [message]="toast().message"
@@ -209,19 +252,23 @@ export class MoreComponent {
   private readonly api = inject(UserApiService);
   private readonly auth = inject(AuthService);
   private readonly themeService = inject(ThemeService);
+  private readonly homePreference = inject(HomePreferenceService);
   private readonly location = inject(LocationService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly appVersion = APP_VERSION;
   protected readonly themeOptions = THEME_OPTIONS;
+  protected readonly homeOptions = HOME_OPTIONS;
 
   protected readonly profile = signal<UserProfileDto | null>(null);
   protected readonly profileError = signal<boolean>(false);
   protected readonly toast = signal<ToastState>(TOAST_HIDDEN);
   protected readonly themePickerVisible = signal<boolean>(false);
+  protected readonly homePickerVisible = signal<boolean>(false);
 
   protected readonly theme = this.themeService.theme;
+  protected readonly home = this.homePreference.preference;
 
   /** ASMA module rows mirror NAVIGATION.md §2a (badges are mock for now). */
   protected readonly asmaRows: MoreRow[] = [
@@ -248,10 +295,7 @@ export class MoreComponent {
     { id: 'teema',         label: 'Teema',             value: this.themeLabel() },
     { id: 'kieli',         label: 'Kieli',             value: 'Suomi' },
     { id: 'sijainti',      label: 'Sijaintipalvelut',  value: this.locationLabel() },
-    {
-      id: 'aloitusnakyma', label: 'Aloitusnäkymä',     value: 'Tehtävät',
-      disabled: true,      hint: 'Tulossa',
-    },
+    { id: 'aloitusnakyma', label: 'Aloitusnäkymä', value: this.homeLabel() },
   ]);
 
   constructor() {
@@ -303,9 +347,26 @@ export class MoreComponent {
           this.flash('Sijaintilupa hylätty', 'warning');
         });
         break;
+      case 'aloitusnakyma':
+        this.homePickerVisible.set(true);
+        break;
       default:
         this.flash(`Tulossa: ${row.label}`, 'info');
     }
+  }
+
+  protected selectHome(id: HomePreference): void {
+    this.homePreference.setPreference(id);
+    this.homePickerVisible.set(false);
+    this.flash('Aloitusnäkymä tallennettu', 'success');
+  }
+
+  protected closeHomePicker(): void {
+    this.homePickerVisible.set(false);
+  }
+
+  private homeLabel(): string {
+    return HOME_OPTIONS.find(o => o.id === this.home())?.label ?? 'Tehtävät';
   }
 
   protected selectTheme(id: LumoTheme): void {

@@ -493,6 +493,174 @@
 }
 
 
+// Home hub — dx-accordion with title bar + tile grid body.
+// Spec: design/handoff_navigation/v5/.../SCREENS.md §06, prototype
+// screens.jsx HomeHubScreen lines 577–647. Title-row and tile-grid
+// styles live here (not in home-hub.component.scss) because they
+// render inside dx-accordion's *dxTemplate, bypassing Angular's
+// emulated CSS encapsulation.
+.lumo-hub-accordion.dx-accordion {
+  background: transparent;
+  border: 0;
+  padding: var(--lumo-space-md) var(--lumo-space-lg) 0;
+
+  .dx-accordion-item {
+    background: var(--lumo-surface-elevated);
+    border: 1px solid var(--lumo-border);
+    border-radius: var(--lumo-radius-xl);
+    margin-bottom: var(--lumo-space-md);
+    overflow: hidden;
+  }
+
+  .dx-accordion-item-title {
+    padding: 14px var(--lumo-space-md);
+    background: var(--lumo-surface-elevated);
+    border: 0;
+
+    &::before, &::after { display: none; }
+  }
+
+  .dx-accordion-item-body {
+    padding: 0 var(--lumo-space-md) var(--lumo-space-md);
+    background: var(--lumo-surface-elevated);
+    border: 0;
+  }
+
+  .hub-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--lumo-space-md);
+    width: 100%;
+  }
+
+  .hub-title-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hub-title-label {
+    font-family: var(--lumo-font-heading);
+    font-weight: var(--lumo-fw-semibold);
+    font-size: var(--lumo-fs-h3);
+    color: var(--lumo-text-primary);
+  }
+
+  .hub-title-sub {
+    font-family: var(--lumo-font-body);
+    font-size: 12px;
+    color: var(--lumo-text-secondary);
+  }
+
+  .hub-title-count {
+    padding: 2px var(--lumo-space-sm);
+    border-radius: var(--lumo-radius-full);
+    background: var(--lumo-primary-subtle);
+    color: var(--lumo-primary);
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .hub-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--lumo-space-sm);
+
+    @media (min-width: 480px) {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    @media (min-width: 768px) {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  .hub-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    min-height: 96px;
+    padding: var(--lumo-space-md);
+    background: var(--lumo-surface);
+    border: 1px solid var(--lumo-border);
+    border-radius: var(--lumo-radius-lg);
+    color: var(--lumo-text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition:
+      transform var(--lumo-duration-fast) var(--lumo-easing),
+      background var(--lumo-duration-fast) var(--lumo-easing),
+      border-color var(--lumo-duration-fast) var(--lumo-easing);
+
+    &:hover {
+      background: var(--lumo-primary-subtle);
+      border-color: var(--lumo-primary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--lumo-focus-ring);
+      outline-offset: 2px;
+    }
+
+    &:active { transform: translateY(1px); }
+
+    &[data-accent='cta']  { border-left: 3px solid var(--lumo-cta); }
+    &[data-accent='warn'] { border-left: 3px solid var(--lumo-warning); }
+    &[data-accent='info'] { border-left: 3px solid var(--lumo-info); }
+    &[data-accent='navy'] { border-left: 3px solid var(--lumo-primary); }
+  }
+
+  .hub-tile-icon {
+    font-size: 22px;
+    color: var(--lumo-text-secondary);
+
+    .hub-tile[data-accent='cta']  & { color: var(--lumo-cta); }
+    .hub-tile[data-accent='warn'] & { color: var(--lumo-warning); }
+    .hub-tile[data-accent='info'] & { color: var(--lumo-info); }
+    .hub-tile[data-accent='navy'] & { color: var(--lumo-primary); }
+  }
+
+  .hub-tile-label {
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: var(--lumo-fs-small);
+    color: var(--lumo-text-primary);
+    line-height: 1.3;
+  }
+
+  .hub-tile-count {
+    position: absolute;
+    top: var(--lumo-space-sm);
+    right: var(--lumo-space-sm);
+    padding: 2px var(--lumo-space-sm);
+    border-radius: var(--lumo-radius-full);
+    background: var(--lumo-primary-subtle);
+    color: var(--lumo-primary);
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: 11px;
+    line-height: 1.4;
+
+    .hub-tile[data-accent='cta']  & {
+      background: var(--lumo-cta-subtle);
+      color: var(--lumo-cta);
+    }
+    .hub-tile[data-accent='warn'] & {
+      background: var(--lumo-warning-subtle);
+      color: var(--lumo-warning);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lumo-hub-accordion.dx-accordion .hub-tile { transition-duration: 0.01ms; }
+}
+
+
 // Task detail — action list, contact list, note text-area
 // Spec: design/handoff_navigation/v5/.../SCREENS.md §04 Tehtävän tarkka näkymä
 .lumo-action-list.dx-list,

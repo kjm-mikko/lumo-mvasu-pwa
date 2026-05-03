@@ -1,11 +1,22 @@
+import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
+
 import { authGuard } from './core/guards/auth.guard';
+import { HomePreferenceService } from './core/services/home-preference.service';
+
+/**
+ * Resolves the root path to whichever landing screen the user picked
+ * via Lisää → Sovellus → Aloitusnäkymä. Defaults to '/tasks' (the C-side
+ * task queue); flips to '/home-hub' when the user prefers the B-side
+ * module hub.
+ */
+const homeRedirect = () => inject(HomePreferenceService).homeRoutePath();
 
 export const routes: Routes = [
   {
     path: '',
     pathMatch: 'full',
-    redirectTo: 'tasks',
+    redirectTo: homeRedirect,
   },
   {
     path: 'auth/login',
@@ -35,6 +46,12 @@ export const routes: Routes = [
           import('./features/tasks/task-detail.component').then(m => m.TaskDetailComponent),
       },
       {
+        path: 'home-hub',
+        data: { reuse: true },
+        loadComponent: () =>
+          import('./features/home-hub/home-hub.component').then(m => m.HomeHubComponent),
+      },
+      {
         path: 'more',
         loadComponent: () =>
           import('./features/more/more.component').then(m => m.MoreComponent),
@@ -48,6 +65,6 @@ export const routes: Routes = [
   },
   {
     path: '**',
-    redirectTo: 'tasks',
+    redirectTo: homeRedirect,
   },
 ];
