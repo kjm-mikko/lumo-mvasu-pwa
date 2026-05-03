@@ -8,7 +8,7 @@ record _why_ each architectural choice was made and what triggers a revisit.
 
 | Layer | Project | Tech |
 | --- | --- | --- |
-| Web API | [`src/mVasu.Api/`](../src/mVasu.Api/) | ASP.NET Core 10 minimal API, Microsoft.Identity.Web, Serilog, Scalar OpenAPI UI |
+| Web API | [`src/mVasu.Api/`](../src/mVasu.Api/) | ASP.NET Core 10 minimal API, Microsoft.Identity.Web, Serilog, Scalar OpenAPI UI; domain feature folders (e.g. `Tiskilista/`) hold IService + Service + query envelope |
 | Shared DTOs | [`src/mVasu.Api.Contracts/`](../src/mVasu.Api.Contracts/) | .NET 10 class library, `record` types only |
 | Domain / persistence | inside `mVasu.Api`, [`Domain/`](../src/mVasu.Api/Domain/) + [`Data/`](../src/mVasu.Api/Data/) | DevExpress XAF + XPO 25.2, xVasu module |
 | Schema scripts | [`db/scripts/`](../db/scripts/) | Hand-applied SQL — runtime never emits DDL |
@@ -150,6 +150,31 @@ mVasu.Pwa/src/app
 Styles cascade `@fontsource-variable/* → DevExtreme stock theme → design/lumo-tokens.css → design/lumo-devextreme-overrides.scss`.
 The design folder is the **single source of truth**; the PWA imports it via
 relative paths so token edits do not require copy-pasting.
+
+## Domain features
+
+### Tiskilista (D1)
+
+`xVasu.Data.Asutus.Tiskilista` exposed through:
+
+- `GET /api/tiskilista` — paginated list. Query parameters:
+  - `q` — free text Contains across `katuosoite`, `kunta`, `KuntaAlue`, `Postitoimipaikka`
+  - `status` — exact match on `Tila` ("Vapaa" / "Varattu" / null = all)
+  - `scope` — `omat` (filters by user's `AlueToimistot` string list) or `kaikki`
+  - `sortBy` — `vapautuu` (default), `osoite`, `vuokra` or `distance`
+  - `userLat` / `userLon` — used only when `sortBy=distance`. Haversine in C# on the filtered set
+  - `page`, `pageSize` (1–100)
+- `GET /api/tiskilista/{id:guid}` — full detail.
+
+The PWA renders a card grid with text search, scope chips and status chips
+([`tiskilista-list.component.ts`](../src/mVasu.Pwa/src/app/features/tiskilista/tiskilista-list.component.ts)),
+opens a detail view with a "Navigoi kohteeseen" action that picks Apple
+Maps on iOS / macOS user-agents and Google Maps elsewhere
+([`tiskilista-detail.component.ts`](../src/mVasu.Pwa/src/app/features/tiskilista/tiskilista-detail.component.ts)).
+Navigating list → detail → back restores scroll position, search input,
+filters and the loaded page via
+[`LumoRouteReuseStrategy`](../src/mVasu.Pwa/src/app/core/routing/lumo-route-reuse-strategy.ts)
+(opt-in per route through `data: { reuse: true }`).
 
 ## What the aihio deliberately does NOT do
 

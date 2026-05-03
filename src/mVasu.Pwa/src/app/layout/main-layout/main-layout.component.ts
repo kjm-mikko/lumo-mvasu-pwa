@@ -132,10 +132,11 @@ export class MainLayoutComponent {
    * - 'tasks' (default) → "Tehtävät" linking to /tasks
    * - 'hub'             → "Koti"     linking to /home-hub
    *
-   * The other tabs (Tiskilista / Asukkaat / Lisää) stay put. The Lumo
-   * wordmark in the sidebar is also a back-stop link to / so a user
-   * navigated away from their preferred home always has at least two
-   * paths back: the dynamic first tab and the brand mark.
+   * Tiskilista is now active (merged from feature/tiskilista). Asukkaat
+   * stays disabled until the People view lands. The Lumo wordmark in
+   * the sidebar is also a back-stop link to / so a user navigated away
+   * from their preferred home always has at least two paths back: the
+   * dynamic first tab and the brand mark.
    */
   protected readonly navItems = computed<ReadonlyArray<NavItem>>(() => {
     const isHub = this.homePreference.preference() === 'hub';
@@ -144,9 +145,9 @@ export class MainLayoutComponent {
       : { label: 'Tehtävät', route: '/tasks',    disabled: false, icon: 'tasks' };
     return [
       first,
-      { label: 'Tiskilista',                    disabled: true,  icon: 'list' },
-      { label: 'Asukkaat',                      disabled: true,  icon: 'users' },
-      { label: 'Lisää',     route: '/more',     disabled: false, icon: 'more' },
+      { label: 'Tiskilista', route: '/tiskilista', disabled: false, icon: 'list' },
+      { label: 'Asukkaat',                         disabled: true,  icon: 'users' },
+      { label: 'Lisää',      route: '/more',       disabled: false, icon: 'more' },
     ];
   });
 }

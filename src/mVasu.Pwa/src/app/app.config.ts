@@ -80,6 +80,8 @@ function msalInterceptorConfigFactory(): MsalInterceptorConfiguration {
   const protectedResourceMap = new Map<string, Array<string>>([
     [`${environment.apiBaseUrl}/api/me`, [environment.msal.apiScope]],
     [`${environment.apiBaseUrl}/api/me/`, [environment.msal.apiScope]],
+    [`${environment.apiBaseUrl}/api/tiskilista`, [environment.msal.apiScope]],
+    [`${environment.apiBaseUrl}/api/tiskilista/`, [environment.msal.apiScope]],
   ]);
   return {
     interactionType: InteractionType.Redirect,
