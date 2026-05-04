@@ -10,6 +10,7 @@ using xVasu.Data.Asma;
 using xVasu.Data.Kire;
 using xVasu.Data.Security;
 using XpoInspection = xVasu.Data.DirectRent.DirectRentalCustomerInspection;
+using XpoOffer = xVasu.Data.Varaus.SopimusVaraus;
 using XpoPriority = xVasu.Data.Security.Priority;
 using XpoShowing = xVasu.Data.Kire.HuoneistoEsittelyTiedot;
 using XpoSopimus = xVasu.Data.Vuha.Sopimus;
@@ -27,9 +28,13 @@ namespace mVasu.Api.Tasks;
 ///   <item>A3 — <c>HuoneistoEsittelyTiedot</c> as <see cref="TaskTypeNames.VisitReservation"/>
 ///         or <see cref="TaskTypeNames.OpenHouse"/>, discriminated by
 ///         <c>EsittelyTyyppi.EsittelyNimi</c>.</item>
+///   <item>A4 — <c>SopimusVaraus</c> as <see cref="TaskTypeNames.SignaturePending"/>.
+///         The entity has no per-user FK so visibility falls back to the
+///         AlueToimisto scope (<c>Talousyksikkö.Aluetunnus</c> ∈ user's
+///         <c>AlueToimistot</c> list, mirroring the Tiskilista pattern).</item>
 /// </list>
-/// Pending in A4-A8: Tarjous / Saapuneet irtisanomiset / Valokuvaus /
-/// Remontti / Liidi / Tiskilista. See
+/// Pending in A5-A8: Saapuneet irtisanomiset / Valokuvaus / Remontti /
+/// Liidi / Tiskilista. See
 /// design/handoff_navigation/v5/.../BACKEND.md §2 for the canonical mapping.
 /// </summary>
 public sealed class TaskQueryService(
@@ -65,17 +70,27 @@ public sealed class TaskQueryService(
             var toDate = query.To ?? today.AddDays(90);
 
             var tasks = new List<TaskDto>();
+            // Per-source isolation: one broken source (XPO load failure, missing
+            // FK target, schema drift) must not kill the whole endpoint.
             if (TypeAllowed(query, TaskTypeNames.GenericTask))
             {
-                tasks.AddRange(QueryGenericTasks(session, user.Oid, fromDate, toDate, query.UrgentOnly, today));
+                SafelyAdd(tasks, "GenericTask",
+                    () => QueryGenericTasks(session, user.Oid, fromDate, toDate, query.UrgentOnly, today));
             }
             if (TypeAllowed(query, TaskTypeNames.VisitIntroduction))
             {
-                tasks.AddRange(QueryVisitIntroductions(session, user.Oid, fromDate, toDate, query.UrgentOnly, today, nowHelsinki));
+                SafelyAdd(tasks, "VisitIntroduction",
+                    () => QueryVisitIntroductions(session, user.Oid, fromDate, toDate, query.UrgentOnly, today, nowHelsinki));
             }
             if (TypeAllowed(query, TaskTypeNames.VisitReservation) || TypeAllowed(query, TaskTypeNames.OpenHouse))
             {
-                tasks.AddRange(QueryShowings(session, user.Oid, fromDate, toDate, query, today, nowHelsinki));
+                SafelyAdd(tasks, "Showing",
+                    () => QueryShowings(session, user.Oid, fromDate, toDate, query, today, nowHelsinki));
+            }
+            if (TypeAllowed(query, TaskTypeNames.SignaturePending))
+            {
+                SafelyAdd(tasks, "SignaturePending",
+                    () => QuerySignaturePending(session, user, today, nowHelsinki));
             }
 
             var groups = BucketByDay(tasks, today);
@@ -141,6 +156,20 @@ public sealed class TaskQueryService(
                     }
                     return Task.FromResult<TaskDetailDto?>(MapShowingDetail(showing, today, nowHelsinki));
                 }
+
+                // SopimusVaraus shares the int key namespace with HuoneistoEsittelyTiedot;
+                // its visibility is AlueToimisto-scoped, not per-user.
+                var offer = os.GetObjectByKey<XpoOffer>(intId);
+                if (offer is not null)
+                {
+                    var offerScope = UserAreaScope.Resolve(user);
+                    if (!IsOfferVisibleTo(offer, offerScope))
+                    {
+                        logger.LogInformation("Offer {Id} access denied for user {UserOid}", intId, user.Oid);
+                        return Task.FromResult<TaskDetailDto?>(null);
+                    }
+                    return Task.FromResult<TaskDetailDto?>(MapOfferDetail(offer, nowHelsinki));
+                }
             }
 
             return Task.FromResult<TaskDetailDto?>(null);
@@ -175,8 +204,43 @@ public sealed class TaskQueryService(
         return (resolved, os);
     }
 
-    private static bool TypeAllowed(TaskQueryParameters query, string type) =>
-        query.Types is null || query.Types.Count == 0 || query.Types.Contains(type);
+    /// <summary>
+    /// When the caller does not pass an explicit <c>?types=</c> filter, the
+    /// list defaults to these three sources only — that is the agreed
+    /// MVP-1 surface (Tutustumiskäynnit, Varausesittelyt, Käyttäjän tehtävät).
+    /// Callers can still opt-in to OpenHouse or SignaturePending by passing
+    /// the type explicitly.
+    /// </summary>
+    private static readonly IReadOnlyList<string> DefaultTypeAllowList =
+    [
+        TaskTypeNames.GenericTask,
+        TaskTypeNames.VisitIntroduction,
+        TaskTypeNames.VisitReservation,
+    ];
+
+    private static bool TypeAllowed(TaskQueryParameters query, string type)
+    {
+        if (query.Types is { Count: > 0 })
+        {
+            return query.Types.Contains(type);
+        }
+        return DefaultTypeAllowList.Contains(type);
+    }
+
+    private void SafelyAdd(List<TaskDto> tasks, string sourceName, Func<IEnumerable<TaskDto>> producer)
+    {
+        try
+        {
+            tasks.AddRange(producer());
+        }
+        catch (Exception ex)
+        {
+            // Log and skip — a broken source must not poison the whole endpoint.
+            // Likely culprits: missing FK targets (referential-integrity drift),
+            // schema additions in the xVasu module that don't match the live DB.
+            logger.LogError(ex, "Task source {Source} failed; skipping", sourceName);
+        }
+    }
 
     // -- Generic task source (xVasuSecuritySystemUserTask) ---------------------
 
@@ -751,6 +815,200 @@ public sealed class TaskQueryService(
         TaskTypeNames.OpenHouse => "Yleisesittely",
         _ => "HuoneistoEsittely",
     };
+
+    // -- Signature-pending source (SopimusVaraus — Tarjous) -------------------
+
+    private const int OfferUrgentDays = 2;
+    private const int OfferRowCap = 50;
+    // TODO: 1000 days is a placeholder until we have a status-based filter on
+    // SopimusVaraus (Sopimustila tunnukset). Without status filtering we keep
+    // a wide lookback so legitimate awaiting-signature rows surface; once we
+    // know which Sopimustila values mean "signature pending" we tighten this
+    // back to ~30-90 days. Tracked in design/open-decisions.md (OD-A4-status).
+    private const int OfferLookbackDays = 1000;
+
+    private static IEnumerable<TaskDto> QuerySignaturePending(
+        Session session, xVasuSecuritySystemUser user, DateOnly today, DateTime nowHelsinki)
+    {
+        var scope = UserAreaScope.Resolve(user);
+        if (!scope.HasAccess)
+        {
+            return Array.Empty<TaskDto>();
+        }
+
+        var criteria = BuildOfferCriteria(scope, nowHelsinki);
+        var collection = new XPCollection<XpoOffer>(session, criteria)
+        {
+            TopReturnedObjects = OfferRowCap,
+        };
+        collection.Sorting.Add(new SortProperty("Kirjattu", DevExpress.Xpo.DB.SortingDirection.Descending));
+        return collection.Select(o => MapOfferCard(o, nowHelsinki)).ToList();
+    }
+
+    private static CriteriaOperator BuildOfferCriteria(UserAreaScope.Resolution scope, DateTime nowHelsinki)
+    {
+        // No status filter yet: SopimusTila is a lookup table whose tunnus
+        // values aren't known to us. Cap the lookback window so the
+        // backlog doesn't explode for users with active areas.
+        var lookback = new BinaryOperator(
+            "Kirjattu",
+            nowHelsinki.AddDays(-OfferLookbackDays),
+            BinaryOperatorType.GreaterOrEqual);
+
+        if (scope.Unrestricted)
+        {
+            return lookback;
+        }
+
+        // Visibility: walk Talousyksikkö (Kustannuspaikka) → BranchCode and
+        // match against the user's branchcodes (Kayttooikeudet). Same key
+        // shape as Tiskilista.BranchCode.
+        var visibility = new InOperator("Talousyksikkö.BranchCode", scope.Areas.Cast<object>().ToArray());
+        return CriteriaOperator.And(visibility, lookback);
+    }
+
+    private static bool IsOfferVisibleTo(XpoOffer o, UserAreaScope.Resolution scope)
+    {
+        if (scope.Unrestricted) return true;
+        if (scope.Areas.Count == 0) return false;
+        var branch = o.Talousyksikkö?.BranchCode;
+        return !string.IsNullOrEmpty(branch) && scope.Areas.Contains(branch, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static TaskDto MapOfferCard(XpoOffer o, DateTime nowHelsinki)
+    {
+        var (when, urgent) = FormatOfferWhen(o.Kirjattu, nowHelsinki);
+        var title = FormatHuoneisto(o.Huoneisto)
+            ?? (string.IsNullOrWhiteSpace(o.Header) ? "Tarjous" : o.Header);
+        var who = ResolveOfferWho(o);
+        var meta = ResolveOfferMeta(o);
+        var idStr = o.VarausTunnus.ToString(CultureInfo.InvariantCulture);
+
+        return new TaskDto(
+            Id: idStr,
+            Type: TaskTypeNames.SignaturePending,
+            Accent: TaskAccents.Cta,
+            Urgent: urgent,
+            When: when,
+            Title: title,
+            Who: who,
+            Meta: meta,
+            TypeLabel: null,
+            Actions:
+            [
+                new TaskActionDto(TaskActionKinds.Navigate, "Avaa tarjous", Primary: true, Destructive: false, Href: null),
+            ],
+            EntityRef: new TaskEntityRefDto("asma", "Tarjous", idStr),
+            SortOrder: 0);
+    }
+
+    private static TaskDetailDto MapOfferDetail(XpoOffer o, DateTime nowHelsinki)
+    {
+        var (when, _) = FormatOfferWhen(o.Kirjattu, nowHelsinki);
+        var title = FormatHuoneisto(o.Huoneisto)
+            ?? (string.IsNullOrWhiteSpace(o.Header) ? "Tarjous" : o.Header);
+
+        var paahakija = o.PaaHakijaAlias;
+        var customer = paahakija is null
+            ? null
+            : new TaskCustomerDto(
+                Id: paahakija.AsiakasNumero.ToString(CultureInfo.InvariantCulture),
+                Name: paahakija.Kokonimi ?? paahakija.Header ?? "Asiakas",
+                Initials: InitialsFor(paahakija.Kokonimi ?? paahakija.Header ?? string.Empty),
+                Phone: string.IsNullOrWhiteSpace(paahakija.Gsm) ? null : paahakija.Gsm,
+                Email: string.IsNullOrWhiteSpace(paahakija.Email) ? null : paahakija.Email);
+
+        var subtitleParts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(o.Sopimustila?.SopimusTilaNimi))
+        {
+            subtitleParts.Add($"Tila {o.Sopimustila.SopimusTilaNimi}");
+        }
+        if (o.Vahvistus)
+        {
+            subtitleParts.Add("Hyväksytty asiakkaalla");
+        }
+        if (!string.IsNullOrWhiteSpace(o.EsittelijaNimi))
+        {
+            subtitleParts.Add($"Esittelijä {o.EsittelijaNimi}");
+        }
+
+        var timeContext = string.IsNullOrEmpty(when.Note)
+            ? when.Time
+            : $"{when.Time} · {when.Note}";
+
+        var actions = new List<TaskRowActionDto>
+        {
+            new("navigate-offer", "Avaa tarjous",
+                TaskRowActionKinds.Navigate, Destructive: false, Confirm: null, Href: null),
+            new("navigate-unit", "Avaa kohde Lumo Verkossa",
+                TaskRowActionKinds.External, Destructive: false, Confirm: null,
+                Href: "https://www.lumo.fi/"),
+            new("cancel", "Peruuta tarjous",
+                TaskRowActionKinds.Cancel, Destructive: true,
+                Confirm: new TaskConfirmDto("Peruuta",
+                    "Peruutetaanko tarjous? Toiminto kirjataan auditiin."),
+                Href: null),
+        };
+
+        var note = string.IsNullOrWhiteSpace(o.Muistio)
+            ? null
+            : new TaskNoteDto($"note-{o.VarausTunnus}", o.Muistio, DateTimeOffset.UtcNow);
+
+        var idStr = o.VarausTunnus.ToString(CultureInfo.InvariantCulture);
+        return new TaskDetailDto(
+            Id: idStr,
+            Type: TaskTypeNames.SignaturePending,
+            TypeLabel: "Tarjous",
+            Accent: TaskAccents.Cta,
+            TimeContext: timeContext,
+            Title: title,
+            Subtitle: subtitleParts.Count == 0 ? null : string.Join(" · ", subtitleParts),
+            Customer: customer,
+            Actions: actions,
+            Note: note,
+            PrimaryCta: new TaskActionDto(
+                TaskActionKinds.Navigate, "Avaa tarjous", Primary: true, Destructive: false, Href: null),
+            EntityRef: new TaskEntityRefDto("asma", "Tarjous", idStr));
+    }
+
+    private static (TaskWhenDto when, bool urgent) FormatOfferWhen(DateTime kirjattu, DateTime nowHelsinki)
+    {
+        // Treat reservations as out-of-band ("Heti" / Today bucket). Days-since-
+        // recorded surfaces in the secondary note; > N days flips the urgent flag.
+        if (kirjattu == default || kirjattu.Year < 1900)
+        {
+            return (new TaskWhenDto("Heti", null, 0), false);
+        }
+
+        var days = Math.Max(0, (int)(nowHelsinki.Date - kirjattu.Date).TotalDays);
+        var note = days == 0 ? "kirjattu tänään" : $"odottaa {days} pv";
+        var urgent = days >= OfferUrgentDays;
+        return (new TaskWhenDto("Heti", note, 0), urgent);
+    }
+
+    private static string? ResolveOfferWho(XpoOffer o)
+    {
+        var paahakija = o.PaaHakijaAlias;
+        if (paahakija is null) return null;
+        var name = paahakija.Kokonimi ?? paahakija.Header;
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        var phone = paahakija.Gsm;
+        return string.IsNullOrWhiteSpace(phone) ? name : $"{name} · {phone}";
+    }
+
+    private static string? ResolveOfferMeta(XpoOffer o)
+    {
+        var parts = new List<string>(2);
+        if (!string.IsNullOrWhiteSpace(o.Sopimustila?.SopimusTilaNimi))
+        {
+            parts.Add(o.Sopimustila.SopimusTilaNimi);
+        }
+        if (o.SopimusAlkaa != default && o.SopimusAlkaa.Year > 1900)
+        {
+            parts.Add($"alkaa {o.SopimusAlkaa.Day}.{o.SopimusAlkaa.Month}.{o.SopimusAlkaa.Year}");
+        }
+        return parts.Count == 0 ? null : string.Join(" · ", parts);
+    }
 
     // -- Shared formatting / bucketing -----------------------------------------
 
