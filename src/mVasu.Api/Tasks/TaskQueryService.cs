@@ -6,20 +6,25 @@ using DevExpress.ExpressApp.Xpo;
 using DevExpress.Xpo;
 using mVasu.Api.Authentication;
 using mVasu.Api.Contracts;
+using xVasu.Data.Asma;
 using xVasu.Data.Security;
-using XpoTask = xVasu.Data.Security.xVasuSecuritySystemUserTask;
+using XpoInspection = xVasu.Data.DirectRent.DirectRentalCustomerInspection;
 using XpoPriority = xVasu.Data.Security.Priority;
+using XpoTask = xVasu.Data.Security.xVasuSecuritySystemUserTask;
 using XpoTaskStatus = xVasu.Data.Security.TaskStatus;
 
 namespace mVasu.Api.Tasks;
 
 /// <summary>
-/// Reads <c>xVasuSecuritySystemUserTask</c> rows visible to the authenticated
-/// user. Visibility mirrors NAVIGATION.md §3a — owner OR assigned-to OR
-/// additional-user. Other domain task sources (Tutustumiskaynti, Yleisesittely,
-/// Varausesittely, Tarjous, Saapuneet irtisanomiset, Valokuvaus, Remontti,
-/// Liidi, Tiskilista) land in subsequent A2-A8 phases; this service emits
-/// only <see cref="TaskTypeNames.GenericTask"/> rows for now.
+/// Aggregates per-user task rows across multiple XAF entity sources.
+/// Currently covered:
+/// <list type="bullet">
+///   <item>A1 — <c>xVasuSecuritySystemUserTask</c> as <see cref="TaskTypeNames.GenericTask"/>.</item>
+///   <item>A2 — <c>DirectRentalCustomerInspection</c> as <see cref="TaskTypeNames.VisitIntroduction"/>.</item>
+/// </list>
+/// Pending in A3-A8: Yleisesittely / Varausesittely / Tarjous / Saapuneet
+/// irtisanomiset / Valokuvaus / Remontti / Liidi / Tiskilista. See
+/// design/handoff_navigation/v5/.../BACKEND.md §2 for the canonical mapping.
 /// </summary>
 public sealed class TaskQueryService(
     IObjectSpaceProvider objectSpaceProvider,
@@ -33,12 +38,6 @@ public sealed class TaskQueryService(
         TaskQueryParameters query,
         CancellationToken cancellationToken = default)
     {
-        // If the caller filtered to only non-generic types we don't yet cover, return empty.
-        if (query.Types is { Count: > 0 } && !query.Types.Contains(TaskTypeNames.GenericTask))
-        {
-            return Task.FromResult(EmptyResponse());
-        }
-
         var (user, os) = ResolveUser(principal);
         if (user is null || os is null)
         {
@@ -51,16 +50,20 @@ public sealed class TaskQueryService(
             var today = DateOnly.FromDateTime(nowHelsinki);
             var fromDate = query.From ?? today;
             var toDate = query.To ?? today.AddDays(30);
-
-            var criteria = BuildCriteria(user.Oid, fromDate, toDate, query.UrgentOnly);
             var session = ((XPObjectSpace)os).Session;
-            var collection = new XPCollection<XpoTask>(session, criteria);
-            collection.Sorting.Add(new SortProperty("DueDate", DevExpress.Xpo.DB.SortingDirection.Ascending));
 
-            var dtos = collection.Select(t => MapCard(t, today)).ToList();
-            var groups = BucketByDay(dtos, today);
+            var tasks = new List<TaskDto>();
+            if (TypeAllowed(query, TaskTypeNames.GenericTask))
+            {
+                tasks.AddRange(QueryGenericTasks(session, user.Oid, fromDate, toDate, query.UrgentOnly, today));
+            }
+            if (TypeAllowed(query, TaskTypeNames.VisitIntroduction))
+            {
+                tasks.AddRange(QueryVisitIntroductions(session, user.Oid, fromDate, toDate, query.UrgentOnly, today, nowHelsinki));
+            }
+
+            var groups = BucketByDay(tasks, today);
             var total = groups.Sum(g => g.Tasks.Count);
-
             return Task.FromResult(new TasksResponseDto(groups, total, DateTimeOffset.UtcNow));
         }
         finally
@@ -87,21 +90,33 @@ public sealed class TaskQueryService(
 
         try
         {
-            var task = os.GetObjectByKey<XpoTask>(oid);
-            if (task is null)
-            {
-                return Task.FromResult<TaskDetailDto?>(null);
-            }
-
-            if (!IsVisibleTo(task, user.Oid))
-            {
-                logger.LogInformation("Task {Oid} access denied for user {UserOid}", oid, user.Oid);
-                return Task.FromResult<TaskDetailDto?>(null);
-            }
-
             var nowHelsinki = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HelsinkiTz);
             var today = DateOnly.FromDateTime(nowHelsinki);
-            return Task.FromResult<TaskDetailDto?>(MapDetail(task, today));
+
+            // Generic task lookup wins because OIDs are globally unique by entity type.
+            var task = os.GetObjectByKey<XpoTask>(oid);
+            if (task is not null)
+            {
+                if (!IsGenericTaskVisibleTo(task, user.Oid))
+                {
+                    logger.LogInformation("Task {Oid} access denied for user {UserOid}", oid, user.Oid);
+                    return Task.FromResult<TaskDetailDto?>(null);
+                }
+                return Task.FromResult<TaskDetailDto?>(MapGenericTaskDetail(task, today));
+            }
+
+            var inspection = os.GetObjectByKey<XpoInspection>(oid);
+            if (inspection is not null)
+            {
+                if (!IsInspectionVisibleTo(inspection, user.Oid))
+                {
+                    logger.LogInformation("Inspection {Oid} access denied for user {UserOid}", oid, user.Oid);
+                    return Task.FromResult<TaskDetailDto?>(null);
+                }
+                return Task.FromResult<TaskDetailDto?>(MapInspectionDetail(inspection, today, nowHelsinki));
+            }
+
+            return Task.FromResult<TaskDetailDto?>(null);
         }
         finally
         {
@@ -133,7 +148,21 @@ public sealed class TaskQueryService(
         return (resolved, os);
     }
 
-    private static CriteriaOperator BuildCriteria(Guid userOid, DateOnly from, DateOnly to, bool urgentOnly)
+    private static bool TypeAllowed(TaskQueryParameters query, string type) =>
+        query.Types is null || query.Types.Count == 0 || query.Types.Contains(type);
+
+    // -- Generic task source (xVasuSecuritySystemUserTask) ---------------------
+
+    private static IEnumerable<TaskDto> QueryGenericTasks(
+        Session session, Guid userOid, DateOnly from, DateOnly to, bool urgentOnly, DateOnly today)
+    {
+        var criteria = BuildGenericTaskCriteria(userOid, from, to, urgentOnly);
+        var collection = new XPCollection<XpoTask>(session, criteria);
+        collection.Sorting.Add(new SortProperty("DueDate", DevExpress.Xpo.DB.SortingDirection.Ascending));
+        return collection.Select(t => MapGenericTaskCard(t, today)).ToList();
+    }
+
+    private static CriteriaOperator BuildGenericTaskCriteria(Guid userOid, DateOnly from, DateOnly to, bool urgentOnly)
     {
         var operands = new List<CriteriaOperator>
         {
@@ -150,7 +179,7 @@ public sealed class TaskQueryService(
         var fromDt = from.ToDateTime(TimeOnly.MinValue);
         var toDt = to.ToDateTime(new TimeOnly(23, 59, 59));
 
-        // Include rows with no DueDate (default DateTime in legacy data) so they
+        // Include rows with no DueDate (legacy default DateTime) so they
         // surface as "Today" rather than disappearing.
         operands.Add(CriteriaOperator.Or(
             new BinaryOperator("DueDate", new DateTime(1900, 1, 1), BinaryOperatorType.Less),
@@ -166,7 +195,7 @@ public sealed class TaskQueryService(
         return CriteriaOperator.And(operands);
     }
 
-    private static bool IsVisibleTo(XpoTask t, Guid userOid)
+    private static bool IsGenericTaskVisibleTo(XpoTask t, Guid userOid)
     {
         if (t.Owner?.Oid == userOid) return true;
         if (t.AssignedTo?.Oid == userOid) return true;
@@ -174,14 +203,14 @@ public sealed class TaskQueryService(
             .Any(au => au.UserID?.Oid == userOid);
     }
 
-    private static TaskDto MapCard(XpoTask t, DateOnly today)
+    private static TaskDto MapGenericTaskCard(XpoTask t, DateOnly today)
     {
         var due = ExtractDueDate(t);
         var when = FormatWhen(due, today);
-        var (accent, urgent) = DeriveAccent(t.Priority, due, today);
+        var (accent, urgent) = DeriveGenericAccent(t.Priority, due, today);
         var typeLabel = t.UserTaskType?.Name;
-        var who = ResolveWho(t);
-        var meta = ResolveMeta(t);
+        var who = ResolveGenericWho(t);
+        var meta = ResolveGenericMeta(t);
 
         return new TaskDto(
             Id: t.Oid.ToString(),
@@ -202,13 +231,13 @@ public sealed class TaskQueryService(
             SortOrder: when.SortOrder == 0 ? 0 : (int?)null);
     }
 
-    private static TaskDetailDto MapDetail(XpoTask t, DateOnly today)
+    private static TaskDetailDto MapGenericTaskDetail(XpoTask t, DateOnly today)
     {
         var due = ExtractDueDate(t);
         var when = FormatWhen(due, today);
-        var (accent, _) = DeriveAccent(t.Priority, due, today);
+        var (accent, _) = DeriveGenericAccent(t.Priority, due, today);
         var typeLabel = t.UserTaskType?.Name ?? "Tehtävä";
-        var meta = ResolveMeta(t);
+        var meta = ResolveGenericMeta(t);
 
         var subtitleParts = new List<string>(3);
         if (!string.IsNullOrWhiteSpace(meta)) subtitleParts.Add(meta!);
@@ -255,15 +284,12 @@ public sealed class TaskQueryService(
     private static DateTime? ExtractDueDate(XpoTask t)
     {
         var due = t.DueDate;
-        // Legacy default value (XAF stores DateTime.MinValue or near-min for "unset")
         if (due < new DateTime(1900, 1, 1)) return null;
         return due;
     }
 
-    private static string? ResolveWho(XpoTask t)
+    private static string? ResolveGenericWho(XpoTask t)
     {
-        // Show the *other* party so the row tells the user what they need to know
-        // — assigned-to from the owner's perspective, owner from the assignee's.
         var assignee = t.AssignedTo?.Kokonimi;
         var owner = t.Owner?.Kokonimi;
         if (!string.IsNullOrWhiteSpace(assignee)) return assignee;
@@ -271,13 +297,10 @@ public sealed class TaskQueryService(
         return null;
     }
 
-    private static string? ResolveMeta(XpoTask t)
+    private static string? ResolveGenericMeta(XpoTask t)
     {
-        // Prefer the most specific anchor: Huoneisto > Sopimus > Kohde.
         if (t.Huoneisto is not null)
         {
-            // Huoneisto.ToString() returns the address-shaped header; reflection
-            // confirms the Huoneisto type lives in xVasu.Data.Kire.
             var header = t.Huoneisto.ToString();
             if (!string.IsNullOrWhiteSpace(header)) return header;
         }
@@ -288,21 +311,199 @@ public sealed class TaskQueryService(
         }
         if (t.Kohde is not null)
         {
-            // Kustannuspaikka.Header is a PersistentAlias that composes
-            // "{Kptunnus} - {KpNimi} {Kunta} {Osoite}".
             var h = t.Kohde.Header;
             if (!string.IsNullOrWhiteSpace(h)) return h;
         }
         return null;
     }
 
-    private static (string accent, bool urgent) DeriveAccent(XpoPriority priority, DateTime? due, DateOnly today)
+    private static (string accent, bool urgent) DeriveGenericAccent(XpoPriority priority, DateTime? due, DateOnly today)
     {
         var overdue = due is { } d && DateOnly.FromDateTime(d) < today;
         if (priority == XpoPriority.High || overdue) return (TaskAccents.Warn, true);
         if (priority == XpoPriority.Low) return (TaskAccents.Info, false);
         return (TaskAccents.Navy, false);
     }
+
+    // -- Visit introduction source (DirectRentalCustomerInspection) ------------
+
+    private static IEnumerable<TaskDto> QueryVisitIntroductions(
+        Session session, Guid userOid, DateOnly from, DateOnly to, bool urgentOnly,
+        DateOnly today, DateTime nowHelsinki)
+    {
+        var criteria = BuildInspectionCriteria(userOid, from, to, urgentOnly, nowHelsinki);
+        var collection = new XPCollection<XpoInspection>(session, criteria);
+        collection.Sorting.Add(new SortProperty("StartedOn", DevExpress.Xpo.DB.SortingDirection.Ascending));
+        return collection.Select(i => MapInspectionCard(i, today, nowHelsinki)).ToList();
+    }
+
+    private static CriteriaOperator BuildInspectionCriteria(
+        Guid userOid, DateOnly from, DateOnly to, bool urgentOnly, DateTime nowHelsinki)
+    {
+        var fromDt = from.ToDateTime(TimeOnly.MinValue);
+        var toDt = to.ToDateTime(new TimeOnly(23, 59, 59));
+
+        var operands = new List<CriteriaOperator>
+        {
+            // Visibility: the inspector or the row creator
+            CriteriaOperator.Or(
+                new BinaryOperator("Employee.Oid", userOid),
+                new BinaryOperator("Owner.Oid", userOid)),
+
+            new BinaryOperator("IsCancelled", false),
+            new BinaryOperator("IsHandled", false),
+            new BinaryOperator("StartedOn", fromDt, BinaryOperatorType.GreaterOrEqual),
+            new BinaryOperator("StartedOn", toDt, BinaryOperatorType.LessOrEqual),
+        };
+
+        if (urgentOnly)
+        {
+            // BACKEND.md §2.1 — urgent if the appointment starts inside the next 2 hours.
+            var twoHoursOut = nowHelsinki.AddHours(2);
+            operands.Add(new BinaryOperator("StartedOn", twoHoursOut, BinaryOperatorType.LessOrEqual));
+        }
+
+        return CriteriaOperator.And(operands);
+    }
+
+    private static bool IsInspectionVisibleTo(XpoInspection i, Guid userOid) =>
+        i.Employee?.Oid == userOid || i.Owner?.Oid == userOid;
+
+    private static TaskDto MapInspectionCard(XpoInspection i, DateOnly today, DateTime nowHelsinki)
+    {
+        var when = FormatWhen(i.StartedOn, today);
+        var urgent = IsInspectionUrgent(i.StartedOn, nowHelsinki);
+        if (urgent && when.Note is null)
+        {
+            when = when with { Note = "alkaa pian" };
+        }
+
+        var (title, who, customerPhone) = ResolveInspectionParties(i);
+        var meta = BuildInspectionMeta(i.Duration);
+
+        var actions = new List<TaskActionDto>
+        {
+            new(TaskActionKinds.Navigate, "Avaa kohde", Primary: true, Destructive: false, Href: null),
+        };
+        if (!string.IsNullOrWhiteSpace(customerPhone))
+        {
+            actions.Add(new TaskActionDto(TaskActionKinds.Phone, "Soita", Primary: false, Destructive: false, $"tel:{customerPhone}"));
+            actions.Add(new TaskActionDto(TaskActionKinds.Sms, "Viesti", Primary: false, Destructive: false, $"sms:{customerPhone}"));
+        }
+
+        return new TaskDto(
+            Id: i.OID.ToString(),
+            Type: TaskTypeNames.VisitIntroduction,
+            Accent: TaskAccents.Navy,
+            Urgent: urgent,
+            When: when,
+            Title: title,
+            Who: who,
+            Meta: meta,
+            TypeLabel: null,
+            Actions: actions,
+            EntityRef: new TaskEntityRefDto("core", "Tutustumiskaynti", i.OID.ToString()),
+            SortOrder: when.SortOrder == 0 ? 0 : (int?)null);
+    }
+
+    private static TaskDetailDto MapInspectionDetail(XpoInspection i, DateOnly today, DateTime nowHelsinki)
+    {
+        var when = FormatWhen(i.StartedOn, today);
+        var (title, who, customerPhone) = ResolveInspectionParties(i);
+        var meta = BuildInspectionMeta(i.Duration);
+
+        var customer = i.Asiakas is null
+            ? null
+            : new TaskCustomerDto(
+                Id: i.Asiakas.AsiakasNumero.ToString(),
+                Name: i.Asiakas.Kokonimi ?? i.Asiakas.Header ?? "Asiakas",
+                Initials: InitialsFor(i.Asiakas.Kokonimi ?? i.Asiakas.Header ?? string.Empty),
+                Phone: string.IsNullOrWhiteSpace(i.Asiakas.Gsm) ? null : i.Asiakas.Gsm,
+                Email: string.IsNullOrWhiteSpace(i.Asiakas.Email) ? null : i.Asiakas.Email);
+
+        var subtitleParts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(meta)) subtitleParts.Add(meta!);
+        if (i.Huoneisto is not null && !string.IsNullOrWhiteSpace(i.Huoneisto.ToString()))
+        {
+            subtitleParts.Add(i.Huoneisto.ToString()!);
+        }
+
+        var timeContext = string.IsNullOrEmpty(when.Note)
+            ? when.Time
+            : $"{when.Time} · {when.Note}";
+
+        var actions = new List<TaskRowActionDto>
+        {
+            new("navigate-unit", "Avaa kohde Lumo Verkossa",
+                TaskRowActionKinds.External, Destructive: false, Confirm: null,
+                Href: "https://www.lumo.fi/"),
+            new("create-offer", "Tee tarjous tästä",
+                TaskRowActionKinds.CreateOffer, Destructive: false, Confirm: null, Href: null),
+            new("mark-done", "Merkitse pidetyksi",
+                TaskRowActionKinds.MarkDone, Destructive: false,
+                Confirm: new TaskConfirmDto("Käynti pidetty?", "Käynti merkitään pidetyksi."),
+                Href: null),
+            new("cancel", "Peruuta",
+                TaskRowActionKinds.Cancel, Destructive: true,
+                Confirm: new TaskConfirmDto("Peruuta",
+                    "Peruutetaanko käynti? Toiminto kirjataan auditiin."),
+                Href: null),
+        };
+
+        var note = string.IsNullOrWhiteSpace(i.Description)
+            ? null
+            : new TaskNoteDto($"note-{i.OID}", i.Description, DateTimeOffset.UtcNow);
+
+        return new TaskDetailDto(
+            Id: i.OID.ToString(),
+            Type: TaskTypeNames.VisitIntroduction,
+            TypeLabel: "Tutustumiskäynti",
+            Accent: TaskAccents.Navy,
+            TimeContext: timeContext,
+            Title: title,
+            Subtitle: subtitleParts.Count == 0 ? null : string.Join(" · ", subtitleParts),
+            Customer: customer,
+            Actions: actions,
+            Note: note,
+            PrimaryCta: new TaskActionDto(
+                TaskActionKinds.Navigate, "Avaa kohde", Primary: true, Destructive: false, Href: null),
+            EntityRef: new TaskEntityRefDto("core", "Tutustumiskaynti", i.OID.ToString()));
+    }
+
+    private static (string title, string? who, string? customerPhone) ResolveInspectionParties(XpoInspection i)
+    {
+        var huoneistoText = i.Huoneisto?.ToString();
+        var fallbackTitle = string.IsNullOrWhiteSpace(i.Subject) ? "Tutustumiskäynti" : i.Subject!;
+        var title = string.IsNullOrWhiteSpace(huoneistoText) ? fallbackTitle : huoneistoText!;
+
+        var customerName = i.Asiakas?.Kokonimi ?? i.Asiakas?.Header;
+        var customerPhone = i.Asiakas?.Gsm;
+        var who = customerName is null
+            ? null
+            : (string.IsNullOrWhiteSpace(customerPhone) ? customerName : $"{customerName} · {customerPhone}");
+
+        return (title, who, string.IsNullOrWhiteSpace(customerPhone) ? null : customerPhone);
+    }
+
+    private static string? BuildInspectionMeta(TimeSpan duration)
+    {
+        var minutes = (int)duration.TotalMinutes;
+        return minutes > 0 ? $"Kesto {minutes} min" : null;
+    }
+
+    private static bool IsInspectionUrgent(DateTime startedOn, DateTime nowHelsinki) =>
+        startedOn >= nowHelsinki && startedOn <= nowHelsinki.AddHours(2);
+
+    private static string InitialsFor(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "··";
+        var parts = name.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0) return "··";
+        if (parts.Length == 1) return parts[0][..Math.Min(2, parts[0].Length)].ToUpperInvariant();
+        return $"{parts[0][0]}{parts[^1][0]}".ToUpperInvariant();
+    }
+
+    // -- Shared formatting / bucketing -----------------------------------------
 
     private static TaskWhenDto FormatWhen(DateTime? due, DateOnly today)
     {
@@ -360,23 +561,17 @@ public sealed class TaskQueryService(
         foreach (var dto in dtos)
         {
             var date = DateFromUnix(dto.When.SortOrder);
-            if (date is null || date.Value <= today)
-            {
-                todays.Add(dto);
-            }
-            else if (date.Value == tomorrow)
-            {
-                tomorrows.Add(dto);
-            }
-            else if (date.Value <= endOfWeek)
-            {
-                weeks.Add(dto);
-            }
-            else
-            {
-                laters.Add(dto);
-            }
+            if (date is null || date.Value <= today) todays.Add(dto);
+            else if (date.Value == tomorrow) tomorrows.Add(dto);
+            else if (date.Value <= endOfWeek) weeks.Add(dto);
+            else laters.Add(dto);
         }
+
+        // Within each bucket: urgent rows first, then sortOrder, then accent priority.
+        SortBucket(todays);
+        SortBucket(tomorrows);
+        SortBucket(weeks);
+        SortBucket(laters);
 
         var groups = new List<TaskGroupDto>(4);
         if (todays.Count > 0) groups.Add(new TaskGroupDto(TaskGroupIds.Today, "Tänään", FormatDate(today), todays));
@@ -385,6 +580,24 @@ public sealed class TaskQueryService(
         if (laters.Count > 0) groups.Add(new TaskGroupDto(TaskGroupIds.Later, "Myöhemmin", FormatDate(today.AddDays(14)), laters));
         return groups;
     }
+
+    private static void SortBucket(List<TaskDto> bucket) =>
+        bucket.Sort((a, b) =>
+        {
+            var urgentCmp = b.Urgent.CompareTo(a.Urgent);
+            if (urgentCmp != 0) return urgentCmp;
+            var sortCmp = a.When.SortOrder.CompareTo(b.When.SortOrder);
+            if (sortCmp != 0) return sortCmp;
+            return AccentRank(a.Accent).CompareTo(AccentRank(b.Accent));
+        });
+
+    private static int AccentRank(string accent) => accent switch
+    {
+        TaskAccents.Cta => 0,
+        TaskAccents.Warn => 1,
+        TaskAccents.Info => 2,
+        _ => 3, // Navy and unknown
+    };
 
     private static DateOnly? DateFromUnix(long unixMs)
     {
@@ -397,7 +610,6 @@ public sealed class TaskQueryService(
 
     private static long ToUnixMs(DateTime localDt)
     {
-        // Treat XPO DateTime as Helsinki-local since XAF persists naive timestamps.
         var unspecified = DateTime.SpecifyKind(localDt, DateTimeKind.Unspecified);
         var utc = TimeZoneInfo.ConvertTimeToUtc(unspecified, HelsinkiTz);
         return new DateTimeOffset(utc, TimeSpan.Zero).ToUnixTimeMilliseconds();
