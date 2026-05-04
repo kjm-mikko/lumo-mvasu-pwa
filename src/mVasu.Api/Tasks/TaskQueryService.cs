@@ -11,6 +11,7 @@ using xVasu.Data.Kire;
 using xVasu.Data.Security;
 using XpoInspection = xVasu.Data.DirectRent.DirectRentalCustomerInspection;
 using XpoPriority = xVasu.Data.Security.Priority;
+using XpoShowing = xVasu.Data.Kire.HuoneistoEsittelyTiedot;
 using XpoSopimus = xVasu.Data.Vuha.Sopimus;
 using XpoTask = xVasu.Data.Security.xVasuSecuritySystemUserTask;
 using XpoTaskStatus = xVasu.Data.Security.TaskStatus;
@@ -23,9 +24,12 @@ namespace mVasu.Api.Tasks;
 /// <list type="bullet">
 ///   <item>A1 — <c>xVasuSecuritySystemUserTask</c> as <see cref="TaskTypeNames.GenericTask"/>.</item>
 ///   <item>A2 — <c>DirectRentalCustomerInspection</c> as <see cref="TaskTypeNames.VisitIntroduction"/>.</item>
+///   <item>A3 — <c>HuoneistoEsittelyTiedot</c> as <see cref="TaskTypeNames.VisitReservation"/>
+///         or <see cref="TaskTypeNames.OpenHouse"/>, discriminated by
+///         <c>EsittelyTyyppi.EsittelyNimi</c>.</item>
 /// </list>
-/// Pending in A3-A8: Yleisesittely / Varausesittely / Tarjous / Saapuneet
-/// irtisanomiset / Valokuvaus / Remontti / Liidi / Tiskilista. See
+/// Pending in A4-A8: Tarjous / Saapuneet irtisanomiset / Valokuvaus /
+/// Remontti / Liidi / Tiskilista. See
 /// design/handoff_navigation/v5/.../BACKEND.md §2 for the canonical mapping.
 /// </summary>
 public sealed class TaskQueryService(
@@ -69,6 +73,10 @@ public sealed class TaskQueryService(
             {
                 tasks.AddRange(QueryVisitIntroductions(session, user.Oid, fromDate, toDate, query.UrgentOnly, today, nowHelsinki));
             }
+            if (TypeAllowed(query, TaskTypeNames.VisitReservation) || TypeAllowed(query, TaskTypeNames.OpenHouse))
+            {
+                tasks.AddRange(QueryShowings(session, user.Oid, fromDate, toDate, query, today, nowHelsinki));
+            }
 
             var groups = BucketByDay(tasks, today);
             var total = groups.Sum(g => g.Tasks.Count);
@@ -85,11 +93,6 @@ public sealed class TaskQueryService(
         string id,
         CancellationToken cancellationToken = default)
     {
-        if (!Guid.TryParse(id, out var oid))
-        {
-            return Task.FromResult<TaskDetailDto?>(null);
-        }
-
         var (user, os) = ResolveUser(principal);
         if (user is null || os is null)
         {
@@ -101,27 +104,43 @@ public sealed class TaskQueryService(
             var nowHelsinki = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HelsinkiTz);
             var today = DateOnly.FromDateTime(nowHelsinki);
 
-            // Generic task lookup wins because OIDs are globally unique by entity type.
-            var task = os.GetObjectByKey<XpoTask>(oid);
-            if (task is not null)
+            // Showing keys are Int32; tasks and inspections share Guid.
+            if (Guid.TryParse(id, out var oid))
             {
-                if (!IsGenericTaskVisibleTo(task, user.Oid))
+                var task = os.GetObjectByKey<XpoTask>(oid);
+                if (task is not null)
                 {
-                    logger.LogInformation("Task {Oid} access denied for user {UserOid}", oid, user.Oid);
-                    return Task.FromResult<TaskDetailDto?>(null);
+                    if (!IsGenericTaskVisibleTo(task, user.Oid))
+                    {
+                        logger.LogInformation("Task {Oid} access denied for user {UserOid}", oid, user.Oid);
+                        return Task.FromResult<TaskDetailDto?>(null);
+                    }
+                    return Task.FromResult<TaskDetailDto?>(MapGenericTaskDetail(task, today));
                 }
-                return Task.FromResult<TaskDetailDto?>(MapGenericTaskDetail(task, today));
-            }
 
-            var inspection = os.GetObjectByKey<XpoInspection>(oid);
-            if (inspection is not null)
-            {
-                if (!IsInspectionVisibleTo(inspection, user.Oid))
+                var inspection = os.GetObjectByKey<XpoInspection>(oid);
+                if (inspection is not null)
                 {
-                    logger.LogInformation("Inspection {Oid} access denied for user {UserOid}", oid, user.Oid);
-                    return Task.FromResult<TaskDetailDto?>(null);
+                    if (!IsInspectionVisibleTo(inspection, user.Oid))
+                    {
+                        logger.LogInformation("Inspection {Oid} access denied for user {UserOid}", oid, user.Oid);
+                        return Task.FromResult<TaskDetailDto?>(null);
+                    }
+                    return Task.FromResult<TaskDetailDto?>(MapInspectionDetail(inspection, today, nowHelsinki));
                 }
-                return Task.FromResult<TaskDetailDto?>(MapInspectionDetail(inspection, today, nowHelsinki));
+            }
+            else if (int.TryParse(id, System.Globalization.NumberStyles.Integer, CultureInfo.InvariantCulture, out var intId))
+            {
+                var showing = os.GetObjectByKey<XpoShowing>(intId);
+                if (showing is not null)
+                {
+                    if (!IsShowingVisibleTo(showing, user.Oid))
+                    {
+                        logger.LogInformation("Showing {Id} access denied for user {UserOid}", intId, user.Oid);
+                        return Task.FromResult<TaskDetailDto?>(null);
+                    }
+                    return Task.FromResult<TaskDetailDto?>(MapShowingDetail(showing, today, nowHelsinki));
+                }
             }
 
             return Task.FromResult<TaskDetailDto?>(null);
@@ -520,6 +539,218 @@ public sealed class TaskQueryService(
         if (parts.Length == 1) return parts[0][..Math.Min(2, parts[0].Length)].ToUpperInvariant();
         return $"{parts[0][0]}{parts[^1][0]}".ToUpperInvariant();
     }
+
+    // -- Showing source (HuoneistoEsittelyTiedot — Yleisesittely + Varausesittely) -
+
+    private static IEnumerable<TaskDto> QueryShowings(
+        Session session, Guid userOid, DateOnly? from, DateOnly to,
+        TaskQueryParameters query, DateOnly today, DateTime nowHelsinki)
+    {
+        var criteria = BuildShowingCriteria(userOid, from, to, query.UrgentOnly, nowHelsinki);
+        var collection = new XPCollection<XpoShowing>(session, criteria);
+        collection.Sorting.Add(new SortProperty("EsittelyAika", DevExpress.Xpo.DB.SortingDirection.Ascending));
+
+        var result = new List<TaskDto>();
+        foreach (var showing in collection)
+        {
+            var type = ResolveShowingType(showing);
+            if (type is null) continue;                 // unknown discriminator → skip
+            if (!TypeAllowed(query, type)) continue;    // honour query.Types filter
+            result.Add(MapShowingCard(showing, type, today, nowHelsinki));
+        }
+        return result;
+    }
+
+    private static CriteriaOperator BuildShowingCriteria(
+        Guid userOid, DateOnly? from, DateOnly to, bool urgentOnly, DateTime nowHelsinki)
+    {
+        var operands = new List<CriteriaOperator>
+        {
+            // Visibility: anyone owning the showing — inspector, creator, or booker.
+            CriteriaOperator.Or(
+                new BinaryOperator("Employee.Oid", userOid),
+                new BinaryOperator("Owner.Oid", userOid),
+                new BinaryOperator("Varaaja.Oid", userOid)),
+
+            new BinaryOperator("EsittelyCancelled", false),
+            new BinaryOperator("EsittelyHandled", false),
+            new BinaryOperator("SystemCancelled", false),
+
+            new BinaryOperator("EsittelyAika", to.ToDateTime(new TimeOnly(23, 59, 59)), BinaryOperatorType.LessOrEqual),
+        };
+
+        if (from is not null)
+        {
+            operands.Add(new BinaryOperator("EsittelyAika", from.Value.ToDateTime(TimeOnly.MinValue), BinaryOperatorType.GreaterOrEqual));
+        }
+
+        if (urgentOnly)
+        {
+            // Same urgency window as inspection — appointments inside the next 2 hours.
+            operands.Add(new BinaryOperator("EsittelyAika", nowHelsinki.AddHours(2), BinaryOperatorType.LessOrEqual));
+        }
+
+        return CriteriaOperator.And(operands);
+    }
+
+    private static bool IsShowingVisibleTo(XpoShowing s, Guid userOid) =>
+        s.Employee?.Oid == userOid || s.Owner?.Oid == userOid || s.Varaaja?.Oid == userOid;
+
+    private static string? ResolveShowingType(XpoShowing s)
+    {
+        // Discriminator is FK to a lookup table (HuoneistoEsittely.EsittelyNimi),
+        // not an enum, so match on name fragments rather than fixed integers.
+        var nimi = s.EsittelyTyyppi?.EsittelyNimi;
+        if (string.IsNullOrWhiteSpace(nimi)) return null;
+        if (nimi.Contains("Varaus", StringComparison.OrdinalIgnoreCase))
+        {
+            return TaskTypeNames.VisitReservation;
+        }
+        if (nimi.Contains("Yleis", StringComparison.OrdinalIgnoreCase))
+        {
+            return TaskTypeNames.OpenHouse;
+        }
+        return null;
+    }
+
+    private static TaskDto MapShowingCard(XpoShowing s, string type, DateOnly today, DateTime nowHelsinki)
+    {
+        var when = FormatWhen(s.EsittelyAika, today);
+        var urgent = IsInspectionUrgent(s.EsittelyAika, nowHelsinki);
+        if (urgent && when.Note is null)
+        {
+            when = when with { Note = "alkaa pian" };
+        }
+
+        var title = FormatHuoneisto(s.Huoneisto)
+            ?? (string.IsNullOrWhiteSpace(s.Subject) ? DefaultShowingTitle(type) : s.Subject!);
+
+        var customerName = s.Asiakas?.Kokonimi ?? s.Asiakas?.Header;
+        var customerPhone = string.IsNullOrWhiteSpace(s.Asiakas?.Gsm) ? null : s.Asiakas!.Gsm;
+        var who = customerName is null
+            ? null
+            : (customerPhone is null ? customerName : $"{customerName} · {customerPhone}");
+
+        // VisitorAmount is filled in after the fact (handled rows only) so
+        // it is always 0 here — don't show it pre-event.
+        var meta = s.EsittelyKesto.TotalMinutes > 0
+            ? $"Kesto {(int)s.EsittelyKesto.TotalMinutes} min"
+            : null;
+
+        var actions = new List<TaskActionDto>
+        {
+            new(TaskActionKinds.Navigate, "Avaa kohde", Primary: true, Destructive: false, Href: null),
+        };
+        if (customerPhone is not null)
+        {
+            actions.Add(new TaskActionDto(TaskActionKinds.Phone, "Soita", Primary: false, Destructive: false, $"tel:{customerPhone}"));
+            actions.Add(new TaskActionDto(TaskActionKinds.Sms, "Viesti", Primary: false, Destructive: false, $"sms:{customerPhone}"));
+        }
+
+        return new TaskDto(
+            Id: s.HuoneistoEsittelyId.ToString(CultureInfo.InvariantCulture),
+            Type: type,
+            Accent: TaskAccents.Navy,
+            Urgent: urgent,
+            When: when,
+            Title: title,
+            Who: who,
+            Meta: meta,
+            TypeLabel: null,
+            Actions: actions,
+            EntityRef: new TaskEntityRefDto("core", ShowingEntityType(type), s.HuoneistoEsittelyId.ToString(CultureInfo.InvariantCulture)),
+            SortOrder: when.SortOrder == 0 ? 0 : (int?)null);
+    }
+
+    private static TaskDetailDto MapShowingDetail(XpoShowing s, DateOnly today, DateTime nowHelsinki)
+    {
+        var type = ResolveShowingType(s) ?? TaskTypeNames.OpenHouse;
+        var when = FormatWhen(s.EsittelyAika, today);
+        var title = FormatHuoneisto(s.Huoneisto)
+            ?? (string.IsNullOrWhiteSpace(s.Subject) ? DefaultShowingTitle(type) : s.Subject!);
+
+        var customer = s.Asiakas is null
+            ? null
+            : new TaskCustomerDto(
+                Id: s.Asiakas.AsiakasNumero.ToString(CultureInfo.InvariantCulture),
+                Name: s.Asiakas.Kokonimi ?? s.Asiakas.Header ?? "Asiakas",
+                Initials: InitialsFor(s.Asiakas.Kokonimi ?? s.Asiakas.Header ?? string.Empty),
+                Phone: string.IsNullOrWhiteSpace(s.Asiakas.Gsm) ? null : s.Asiakas.Gsm,
+                Email: string.IsNullOrWhiteSpace(s.Asiakas.Email) ? null : s.Asiakas.Email);
+
+        var subtitleParts = new List<string>();
+        if (s.EsittelyKesto.TotalMinutes > 0)
+        {
+            subtitleParts.Add($"Kesto {(int)s.EsittelyKesto.TotalMinutes} min");
+        }
+        if (!string.IsNullOrWhiteSpace(s.EsittelijaNimi))
+        {
+            subtitleParts.Add($"Esittelijä {s.EsittelijaNimi}");
+        }
+
+        var timeContext = string.IsNullOrEmpty(when.Note)
+            ? when.Time
+            : $"{when.Time} · {when.Note}";
+
+        var actions = new List<TaskRowActionDto>
+        {
+            new("navigate-unit", "Avaa kohde Lumo Verkossa",
+                TaskRowActionKinds.External, Destructive: false, Confirm: null,
+                Href: "https://www.lumo.fi/"),
+            new("create-offer", "Tee tarjous tästä",
+                TaskRowActionKinds.CreateOffer, Destructive: false, Confirm: null, Href: null),
+            new("mark-done", "Merkitse pidetyksi",
+                TaskRowActionKinds.MarkDone, Destructive: false,
+                Confirm: new TaskConfirmDto("Esittely pidetty?", "Esittely merkitään pidetyksi."),
+                Href: null),
+            new("cancel", "Peruuta",
+                TaskRowActionKinds.Cancel, Destructive: true,
+                Confirm: new TaskConfirmDto("Peruuta",
+                    "Peruutetaanko esittely? Toiminto kirjataan auditiin."),
+                Href: null),
+        };
+
+        var note = string.IsNullOrWhiteSpace(s.EsittelyMemo)
+            ? null
+            : new TaskNoteDto($"note-{s.HuoneistoEsittelyId}", s.EsittelyMemo, DateTimeOffset.UtcNow);
+
+        var idStr = s.HuoneistoEsittelyId.ToString(CultureInfo.InvariantCulture);
+        return new TaskDetailDto(
+            Id: idStr,
+            Type: type,
+            TypeLabel: ShowingTypeLabel(type),
+            Accent: TaskAccents.Navy,
+            TimeContext: timeContext,
+            Title: title,
+            Subtitle: subtitleParts.Count == 0 ? null : string.Join(" · ", subtitleParts),
+            Customer: customer,
+            Actions: actions,
+            Note: note,
+            PrimaryCta: new TaskActionDto(
+                TaskActionKinds.Navigate, "Avaa kohde", Primary: true, Destructive: false, Href: null),
+            EntityRef: new TaskEntityRefDto("core", ShowingEntityType(type), idStr));
+    }
+
+    private static string DefaultShowingTitle(string type) => type switch
+    {
+        TaskTypeNames.VisitReservation => "Varausesittely",
+        TaskTypeNames.OpenHouse => "Yleisesittely",
+        _ => "Esittely",
+    };
+
+    private static string ShowingTypeLabel(string type) => type switch
+    {
+        TaskTypeNames.VisitReservation => "Varausesittely",
+        TaskTypeNames.OpenHouse => "Yleisesittely",
+        _ => "Esittely",
+    };
+
+    private static string ShowingEntityType(string type) => type switch
+    {
+        TaskTypeNames.VisitReservation => "Varausesittely",
+        TaskTypeNames.OpenHouse => "Yleisesittely",
+        _ => "HuoneistoEsittely",
+    };
 
     // -- Shared formatting / bucketing -----------------------------------------
 
