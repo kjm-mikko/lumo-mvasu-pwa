@@ -24,6 +24,7 @@ import {
 import { DxButtonModule } from 'devextreme-angular/ui/button';
 import { DxListModule } from 'devextreme-angular/ui/list';
 import { DxPopupModule } from 'devextreme-angular/ui/popup';
+import { DxSelectBoxModule } from 'devextreme-angular/ui/select-box';
 import { DxTextBoxModule } from 'devextreme-angular/ui/text-box';
 import { DxToastModule } from 'devextreme-angular/ui/toast';
 
@@ -53,6 +54,20 @@ const TYPE_OPTIONS: ReadonlyArray<{ readonly id: CustomerType; readonly label: s
   { id: 'person',          label: CUSTOMER_TYPE_LABELS.person },
   { id: 'company',         label: CUSTOMER_TYPE_LABELS.company },
   { id: 'contact-person',  label: CUSTOMER_TYPE_LABELS['contact-person'] },
+];
+
+/**
+ * Cities promoted to the filter sheet's quick-pick chip row. Picked
+ * by population (Finland's five largest); covers the bulk of Lumo's
+ * portfolio with one tap. Cities outside this set are reachable via
+ * the dx-select-box typeahead below the chips.
+ *
+ * Phase 2 follow-up: the backend metadata endpoint can return its
+ * own ordered top list (e.g. by customer count), at which point this
+ * static array gets dropped.
+ */
+const TOP_CITIES: ReadonlyArray<string> = [
+  'Helsinki', 'Tampere', 'Espoo', 'Vantaa', 'Oulu',
 ];
 
 const RELATION_OPTIONS: ReadonlyArray<{ readonly id: CustomerRelationFilter; readonly label: string }> = [
@@ -87,7 +102,14 @@ interface CountPill {
  */
 @Component({
   selector: 'app-customers',
-  imports: [DxButtonModule, DxListModule, DxPopupModule, DxTextBoxModule, DxToastModule],
+  imports: [
+    DxButtonModule,
+    DxListModule,
+    DxPopupModule,
+    DxSelectBoxModule,
+    DxTextBoxModule,
+    DxToastModule,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <main class="customers">
@@ -295,12 +317,23 @@ interface CountPill {
           <button type="button" class="filter-option"
                   [class.filter-option--active]="!filters().city"
                   (click)="setCity(undefined)">Kaikki</button>
-          @for (city of cities; track city) {
+          @for (city of topCitiesAvailable; track city) {
             <button type="button" class="filter-option"
                     [class.filter-option--active]="filters().city === city"
                     (click)="setCity(city)">{{ city }}</button>
           }
         </div>
+        <dx-select-box
+          class="filter-city-search"
+          [items]="citiesData"
+          [value]="filters().city ?? null"
+          [searchEnabled]="true"
+          [showClearButton]="true"
+          searchMode="contains"
+          placeholder="Hae muista kunnista…"
+          (onValueChanged)="onCitySelected($event)"
+          [elementAttr]="{ 'aria-label': 'Hae muista kunnista' }"
+        ></dx-select-box>
       </div>
     </dx-popup>
 
@@ -323,6 +356,18 @@ export class CustomersComponent {
   protected readonly typeOptions = TYPE_OPTIONS;
   protected readonly relationOptions = RELATION_OPTIONS;
   protected readonly cities = this.customersService.cities;
+
+  /**
+   * Top cities that actually exist in the dataset. Filtering by
+   * `cities` here means a TOP_CITIES entry never appears as a chip
+   * unless at least one customer is in it — keeps the row lean when
+   * the data is sparse (e.g. dev / staging).
+   */
+  protected readonly topCitiesAvailable: ReadonlyArray<string> =
+    TOP_CITIES.filter(c => this.cities.includes(c));
+
+  /** dx-select-box wants a mutable array for `[items]`. */
+  protected readonly citiesData: string[] = [...this.cities];
 
   protected readonly query = signal<string>('');
   protected readonly filters = signal<CustomerFilters>({});
@@ -425,6 +470,14 @@ export class CustomersComponent {
   }
   protected setCity(city: string | undefined): void {
     this.updateFilters(f => ({ ...f, city }));
+  }
+
+  /**
+   * dx-select-box clear → null; selection → string. Both flow into the
+   * shared filters.city signal so the chip row stays in sync.
+   */
+  protected onCitySelected(event: { value?: string | null }): void {
+    this.setCity(event.value ?? undefined);
   }
   protected clearType(): void     { this.updateFilters(f => ({ ...f, type: undefined })); }
   protected clearRelation(): void { this.updateFilters(f => ({ ...f, relation: undefined })); }
