@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   ViewChild,
   computed,
@@ -9,13 +10,23 @@ import {
 } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { Subject, debounceTime, distinctUntilChanged, map, startWith } from 'rxjs';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import {
+  Subject,
+  catchError,
+  debounceTime,
+  distinctUntilChanged,
+  map,
+  of,
+  startWith,
+  switchMap,
+} from 'rxjs';
 import { DxButtonModule } from 'devextreme-angular/ui/button';
 import { DxListModule } from 'devextreme-angular/ui/list';
 import { DxTextBoxModule } from 'devextreme-angular/ui/text-box';
 import { DxToastModule } from 'devextreme-angular/ui/toast';
 
+import { SearchApiService } from '../../core/services/search-api.service';
 import {
   QuickSearchService,
   type SearchGroup,
@@ -146,6 +157,8 @@ const DEBOUNCE_MS = 200;
 })
 export class QuickSearchComponent {
   private readonly searchService = inject(QuickSearchService);
+  private readonly api = inject(SearchApiService);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
 
@@ -169,8 +182,27 @@ export class QuickSearchComponent {
 
   protected readonly recentQueries = this.searchService.recentQueries;
 
-  protected readonly groups = computed<ReadonlyArray<SearchGroup>>(() =>
-    this.searchService.search(this.debouncedQuery()),
+  /**
+   * Server-fed result groups. The pipeline below mirrors `debouncedQuery`
+   * but feeds it through the HTTP service with `switchMap` so rapid
+   * keystrokes cancel pending requests. Errors are folded to an empty
+   * group list so the UI shows the "Ei osumia" hint instead of crashing.
+   */
+  protected readonly groups = toSignal(
+    this.query$.pipe(
+      startWith(''),
+      debounceTime(DEBOUNCE_MS),
+      distinctUntilChanged(),
+      map(q => q.trim()),
+      switchMap(q => this.api.search(q).pipe(
+        catchError((err) => {
+          console.error('[QuickSearch] /api/search failed', err);
+          return of([] as ReadonlyArray<SearchGroup>);
+        }),
+      )),
+      takeUntilDestroyed(this.destroyRef),
+    ),
+    { initialValue: [] as ReadonlyArray<SearchGroup> },
   );
 
   protected readonly dxGroups = computed<ReadonlyArray<DxSearchGroup>>(() =>

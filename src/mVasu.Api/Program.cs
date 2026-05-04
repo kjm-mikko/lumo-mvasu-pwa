@@ -6,6 +6,7 @@ using mVasu.Api.Authentication;
 using mVasu.Api.Contracts;
 using mVasu.Api.Data;
 using mVasu.Api.Customers;
+using mVasu.Api.Search;
 using mVasu.Api.Tasks;
 using mVasu.Api.Tiskilista;
 using Scalar.AspNetCore;
@@ -59,6 +60,7 @@ builder.Services.AddScoped<IUserSettingsService, XpoUserSettingsService>();
 builder.Services.AddScoped<ITiskilistaQueryService, TiskilistaQueryService>();
 builder.Services.AddScoped<ITaskQueryService, TaskQueryService>();
 builder.Services.AddScoped<ICustomerQueryService, CustomerQueryService>();
+builder.Services.AddScoped<ISearchService, SearchService>();
 
 builder.Services.AddVasuXpo(builder.Configuration);
 
@@ -432,6 +434,34 @@ app.MapGet("/api/customers", async (
                  "by displayName. Phase 1 returns a mock fixture; Phase 2 projects " +
                  "from xVasu.Data.Asma.Henkilo / Yritys / Yhteyshenkilo with related-" +
                  "entity counts (Hakemus, SopimusVaraus, Sopimus, Tarjous, Esittely).")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/search", async (
+        ClaimsPrincipal user,
+        ISearchService service,
+        string? q,
+        int? limit,
+        CancellationToken ct) =>
+    {
+        var resolvedLimit = limit ?? 5;
+        if (resolvedLimit < 1 || resolvedLimit > 50)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(limit)] = ["limit must be between 1 and 50."],
+            });
+        }
+
+        var query = new SearchQueryParameters(Q: q, Limit: resolvedLimit);
+        var result = await service.SearchAsync(user, query, ct);
+        return Results.Ok(result);
+    })
+    .WithName("Search")
+    .WithSummary("Long-tail global search across XAF entity tables (units, people, " +
+                 "contracts) and the static action catalogue. Min query length 2; " +
+                 "shorter inputs return an empty group list. Phase 1 runs against " +
+                 "the local mock fixture; Phase 2 will use Postgres tsvector / " +
+                 "pg_trgm fuzzy match.")
     .RequireAuthorization(AccessAsUserPolicy);
 
 try

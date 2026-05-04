@@ -86,6 +86,7 @@ function msalInterceptorConfigFactory(): MsalInterceptorConfiguration {
     [`${environment.apiBaseUrl}/api/tasks/`, [environment.msal.apiScope]],
     [`${environment.apiBaseUrl}/api/customers`, [environment.msal.apiScope]],
     [`${environment.apiBaseUrl}/api/customers/`, [environment.msal.apiScope]],
+    [`${environment.apiBaseUrl}/api/search`, [environment.msal.apiScope]],
   ]);
   return {
     interactionType: InteractionType.Redirect,
