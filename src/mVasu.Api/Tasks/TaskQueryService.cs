@@ -7,9 +7,11 @@ using DevExpress.Xpo;
 using mVasu.Api.Authentication;
 using mVasu.Api.Contracts;
 using xVasu.Data.Asma;
+using xVasu.Data.Kire;
 using xVasu.Data.Security;
 using XpoInspection = xVasu.Data.DirectRent.DirectRentalCustomerInspection;
 using XpoPriority = xVasu.Data.Security.Priority;
+using XpoSopimus = xVasu.Data.Vuha.Sopimus;
 using XpoTask = xVasu.Data.Security.xVasuSecuritySystemUserTask;
 using XpoTaskStatus = xVasu.Data.Security.TaskStatus;
 
@@ -48,9 +50,15 @@ public sealed class TaskQueryService(
         {
             var nowHelsinki = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HelsinkiTz);
             var today = DateOnly.FromDateTime(nowHelsinki);
-            var fromDate = query.From ?? today;
-            var toDate = query.To ?? today.AddDays(30);
             var session = ((XPObjectSpace)os).Session;
+
+            // Date bounds: only apply when caller explicitly passes them. Defaults
+            // intentionally have no lower bound so overdue rows surface in the
+            // Today bucket as "Heti / myöhässä N pv". Default upper bound is far
+            // enough to surface near-term planning without dragging in 5-year
+            // milestones that hide today's work.
+            var fromDate = query.From;
+            var toDate = query.To ?? today.AddDays(90);
 
             var tasks = new List<TaskDto>();
             if (TypeAllowed(query, TaskTypeNames.GenericTask))
@@ -154,7 +162,7 @@ public sealed class TaskQueryService(
     // -- Generic task source (xVasuSecuritySystemUserTask) ---------------------
 
     private static IEnumerable<TaskDto> QueryGenericTasks(
-        Session session, Guid userOid, DateOnly from, DateOnly to, bool urgentOnly, DateOnly today)
+        Session session, Guid userOid, DateOnly? from, DateOnly to, bool urgentOnly, DateOnly today)
     {
         var criteria = BuildGenericTaskCriteria(userOid, from, to, urgentOnly);
         var collection = new XPCollection<XpoTask>(session, criteria);
@@ -162,7 +170,7 @@ public sealed class TaskQueryService(
         return collection.Select(t => MapGenericTaskCard(t, today)).ToList();
     }
 
-    private static CriteriaOperator BuildGenericTaskCriteria(Guid userOid, DateOnly from, DateOnly to, bool urgentOnly)
+    private static CriteriaOperator BuildGenericTaskCriteria(Guid userOid, DateOnly? from, DateOnly to, bool urgentOnly)
     {
         var operands = new List<CriteriaOperator>
         {
@@ -174,18 +182,15 @@ public sealed class TaskQueryService(
 
             // Hide finished work
             new BinaryOperator("Status", XpoTaskStatus.Completed, BinaryOperatorType.NotEqual),
+
+            // Upper bound only — overdue rows always surface as "Heti".
+            new BinaryOperator("DueDate", to.ToDateTime(new TimeOnly(23, 59, 59)), BinaryOperatorType.LessOrEqual),
         };
 
-        var fromDt = from.ToDateTime(TimeOnly.MinValue);
-        var toDt = to.ToDateTime(new TimeOnly(23, 59, 59));
-
-        // Include rows with no DueDate (legacy default DateTime) so they
-        // surface as "Today" rather than disappearing.
-        operands.Add(CriteriaOperator.Or(
-            new BinaryOperator("DueDate", new DateTime(1900, 1, 1), BinaryOperatorType.Less),
-            CriteriaOperator.And(
-                new BinaryOperator("DueDate", fromDt, BinaryOperatorType.GreaterOrEqual),
-                new BinaryOperator("DueDate", toDt, BinaryOperatorType.LessOrEqual))));
+        if (from is not null)
+        {
+            operands.Add(new BinaryOperator("DueDate", from.Value.ToDateTime(TimeOnly.MinValue), BinaryOperatorType.GreaterOrEqual));
+        }
 
         if (urgentOnly)
         {
@@ -299,21 +304,29 @@ public sealed class TaskQueryService(
 
     private static string? ResolveGenericMeta(XpoTask t)
     {
-        if (t.Huoneisto is not null)
-        {
-            var header = t.Huoneisto.ToString();
-            if (!string.IsNullOrWhiteSpace(header)) return header;
-        }
-        if (t.Sopimus is not null)
-        {
-            var s = t.Sopimus.ToString();
-            if (!string.IsNullOrWhiteSpace(s)) return s;
-        }
-        if (t.Kohde is not null)
-        {
-            var h = t.Kohde.Header;
-            if (!string.IsNullOrWhiteSpace(h)) return h;
-        }
+        var huoneisto = FormatHuoneisto(t.Huoneisto);
+        if (huoneisto is not null) return huoneisto;
+
+        var sopimus = FormatSopimus(t.Sopimus);
+        if (sopimus is not null) return sopimus;
+
+        if (t.Kohde is not null && !string.IsNullOrWhiteSpace(t.Kohde.Header)) return t.Kohde.Header;
+        return null;
+    }
+
+    private static string? FormatHuoneisto(Huoneisto? h)
+    {
+        if (h is null) return null;
+        if (!string.IsNullOrWhiteSpace(h.Header)) return h.Header;
+        if (!string.IsNullOrWhiteSpace(h.Osoite)) return h.Osoite;
+        return null;
+    }
+
+    private static string? FormatSopimus(XpoSopimus? s)
+    {
+        if (s is null) return null;
+        if (!string.IsNullOrWhiteSpace(s.MobileHeaderAlias)) return s.MobileHeaderAlias;
+        if (!string.IsNullOrWhiteSpace(s.Header)) return s.Header;
         return null;
     }
 
@@ -328,7 +341,7 @@ public sealed class TaskQueryService(
     // -- Visit introduction source (DirectRentalCustomerInspection) ------------
 
     private static IEnumerable<TaskDto> QueryVisitIntroductions(
-        Session session, Guid userOid, DateOnly from, DateOnly to, bool urgentOnly,
+        Session session, Guid userOid, DateOnly? from, DateOnly to, bool urgentOnly,
         DateOnly today, DateTime nowHelsinki)
     {
         var criteria = BuildInspectionCriteria(userOid, from, to, urgentOnly, nowHelsinki);
@@ -338,11 +351,8 @@ public sealed class TaskQueryService(
     }
 
     private static CriteriaOperator BuildInspectionCriteria(
-        Guid userOid, DateOnly from, DateOnly to, bool urgentOnly, DateTime nowHelsinki)
+        Guid userOid, DateOnly? from, DateOnly to, bool urgentOnly, DateTime nowHelsinki)
     {
-        var fromDt = from.ToDateTime(TimeOnly.MinValue);
-        var toDt = to.ToDateTime(new TimeOnly(23, 59, 59));
-
         var operands = new List<CriteriaOperator>
         {
             // Visibility: the inspector or the row creator
@@ -352,9 +362,15 @@ public sealed class TaskQueryService(
 
             new BinaryOperator("IsCancelled", false),
             new BinaryOperator("IsHandled", false),
-            new BinaryOperator("StartedOn", fromDt, BinaryOperatorType.GreaterOrEqual),
-            new BinaryOperator("StartedOn", toDt, BinaryOperatorType.LessOrEqual),
+
+            // Upper bound only — past unhandled inspections still surface as urgent.
+            new BinaryOperator("StartedOn", to.ToDateTime(new TimeOnly(23, 59, 59)), BinaryOperatorType.LessOrEqual),
         };
+
+        if (from is not null)
+        {
+            operands.Add(new BinaryOperator("StartedOn", from.Value.ToDateTime(TimeOnly.MinValue), BinaryOperatorType.GreaterOrEqual));
+        }
 
         if (urgentOnly)
         {
@@ -423,9 +439,11 @@ public sealed class TaskQueryService(
 
         var subtitleParts = new List<string>();
         if (!string.IsNullOrWhiteSpace(meta)) subtitleParts.Add(meta!);
-        if (i.Huoneisto is not null && !string.IsNullOrWhiteSpace(i.Huoneisto.ToString()))
+        var huoneistoText = FormatHuoneisto(i.Huoneisto);
+        // Avoid duplicating the apartment when the title already shows it.
+        if (!string.IsNullOrWhiteSpace(huoneistoText) && huoneistoText != title)
         {
-            subtitleParts.Add(i.Huoneisto.ToString()!);
+            subtitleParts.Add(huoneistoText!);
         }
 
         var timeContext = string.IsNullOrEmpty(when.Note)
@@ -472,9 +490,9 @@ public sealed class TaskQueryService(
 
     private static (string title, string? who, string? customerPhone) ResolveInspectionParties(XpoInspection i)
     {
-        var huoneistoText = i.Huoneisto?.ToString();
+        var huoneistoText = FormatHuoneisto(i.Huoneisto);
         var fallbackTitle = string.IsNullOrWhiteSpace(i.Subject) ? "Tutustumiskäynti" : i.Subject!;
-        var title = string.IsNullOrWhiteSpace(huoneistoText) ? fallbackTitle : huoneistoText!;
+        var title = huoneistoText ?? fallbackTitle;
 
         var customerName = i.Asiakas?.Kokonimi ?? i.Asiakas?.Header;
         var customerPhone = i.Asiakas?.Gsm;
