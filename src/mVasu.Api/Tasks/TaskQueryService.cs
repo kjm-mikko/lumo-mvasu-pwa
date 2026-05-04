@@ -1,480 +1,427 @@
 using System.Globalization;
 using System.Security.Claims;
+using DevExpress.Data.Filtering;
+using DevExpress.ExpressApp;
+using DevExpress.ExpressApp.Xpo;
+using DevExpress.Xpo;
+using mVasu.Api.Authentication;
 using mVasu.Api.Contracts;
+using xVasu.Data.Security;
+using XpoTask = xVasu.Data.Security.xVasuSecuritySystemUserTask;
+using XpoPriority = xVasu.Data.Security.Priority;
+using XpoTaskStatus = xVasu.Data.Security.TaskStatus;
 
 namespace mVasu.Api.Tasks;
 
 /// <summary>
-/// Phase-1 mock implementation of <see cref="ITaskQueryService"/>. Returns
-/// a hand-curated dataset that mirrors what the PWA used to ship in
-/// <c>features/tasks/mock-tasks.ts</c>; once Phase 2 lands, the same
-/// public surface will execute real XPO queries against the XAF entity
-/// sources listed in BACKEND.md §2.
+/// Reads <c>xVasuSecuritySystemUserTask</c> rows visible to the authenticated
+/// user. Visibility mirrors NAVIGATION.md §3a — owner OR assigned-to OR
+/// additional-user. Other domain task sources (Tutustumiskaynti, Yleisesittely,
+/// Varausesittely, Tarjous, Saapuneet irtisanomiset, Valokuvaus, Remontti,
+/// Liidi, Tiskilista) land in subsequent A2-A8 phases; this service emits
+/// only <see cref="TaskTypeNames.GenericTask"/> rows for now.
 /// </summary>
-public sealed class TaskQueryService : ITaskQueryService
+public sealed class TaskQueryService(
+    IObjectSpaceProvider objectSpaceProvider,
+    ILogger<TaskQueryService> logger) : ITaskQueryService
 {
     private static readonly TimeZoneInfo HelsinkiTz = ResolveHelsinkiTimeZone();
     private static readonly CultureInfo FiCulture = CultureInfo.GetCultureInfo("fi-FI");
-
-    public Task<TaskDetailDto?> GetAsync(
-        ClaimsPrincipal principal,
-        string id,
-        CancellationToken cancellationToken = default)
-    {
-        var nowHelsinki = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HelsinkiTz);
-        var allTasks = BuildMockGroups(nowHelsinki).SelectMany(g => g.Tasks);
-        var card = allTasks.FirstOrDefault(t => t.Id == id);
-        if (card is null)
-        {
-            return Task.FromResult<TaskDetailDto?>(null);
-        }
-
-        return Task.FromResult<TaskDetailDto?>(BuildDetail(card));
-    }
-
-    private static TaskDetailDto BuildDetail(TaskDto card)
-    {
-        var typeLabel = card.TypeLabel ?? TypeLabelFor(card.Type);
-
-        var customer = card.Who is null ? null : BuildCustomer(card);
-
-        var rowActions = BuildRowActions(card.Type, card.Id);
-
-        var note = BuildNote(card);
-
-        var primary = card.Actions.FirstOrDefault(a => a.Primary)
-            ?? card.Actions.FirstOrDefault()
-            ?? new TaskActionDto(TaskActionKinds.Navigate, "Avaa kohde", true, false, null);
-
-        var timeContext = card.When.Note is null
-            ? card.When.Time
-            : $"{card.When.Time} · {card.When.Note}";
-
-        return new TaskDetailDto(
-            Id: card.Id,
-            Type: card.Type,
-            TypeLabel: typeLabel,
-            Accent: card.Accent,
-            TimeContext: timeContext,
-            Title: card.Title,
-            Subtitle: card.Meta,
-            Customer: customer,
-            Actions: rowActions,
-            Note: note,
-            PrimaryCta: primary,
-            EntityRef: card.EntityRef);
-    }
-
-    private static TaskCustomerDto BuildCustomer(TaskDto card)
-    {
-        var who = card.Who ?? string.Empty;
-        var nameOnly = who.Split('·')[0].Trim();
-        var initials = InitialsFor(nameOnly);
-        var phone = ExtractPhone(who);
-        return new TaskCustomerDto(
-            Id: $"customer-{card.Id}",
-            Name: nameOnly,
-            Initials: initials,
-            Phone: phone,
-            Email: null);
-    }
-
-    private static string InitialsFor(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return "··";
-        var parts = name.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length == 0) return "··";
-        if (parts.Length == 1) return parts[0][..Math.Min(2, parts[0].Length)].ToUpperInvariant();
-        return $"{parts[0][0]}{parts[^1][0]}".ToUpperInvariant();
-    }
-
-    private static string? ExtractPhone(string who)
-    {
-        // Match a Finnish-style phone number embedded in the "who" string.
-        var match = System.Text.RegularExpressions.Regex.Match(who, @"\+?\d[\d\s]{5,}");
-        return match.Success ? match.Value.Trim() : null;
-    }
-
-    private static IReadOnlyList<TaskRowActionDto> BuildRowActions(string type, string taskId) => type switch
-    {
-        TaskTypeNames.VisitIntroduction or TaskTypeNames.VisitReservation =>
-        [
-            new TaskRowActionDto("navigate-unit", "Avaa kohde Lumo Verkossa",
-                TaskRowActionKinds.External, Destructive: false, Confirm: null,
-                Href: "https://www.lumo.fi/"),
-            new TaskRowActionDto("create-offer", "Tee tarjous tästä",
-                TaskRowActionKinds.CreateOffer, Destructive: false, Confirm: null, Href: null),
-            new TaskRowActionDto("mark-done", "Merkitse pidetyksi",
-                TaskRowActionKinds.MarkDone, Destructive: false,
-                Confirm: new TaskConfirmDto("Käynti pidetty?", "Käynti merkitään pidetyksi."),
-                Href: null),
-            new TaskRowActionDto("cancel", "Peruuta",
-                TaskRowActionKinds.Cancel, Destructive: true,
-                Confirm: new TaskConfirmDto("Peruuta",
-                    "Peruutetaanko tehtävä? Toiminto kirjataan auditiin."),
-                Href: null),
-        ],
-
-        TaskTypeNames.SignaturePending =>
-        [
-            new TaskRowActionDto("navigate-unit", "Avaa kohde Lumo Verkossa",
-                TaskRowActionKinds.External, Destructive: false, Confirm: null,
-                Href: "https://www.lumo.fi/"),
-            new TaskRowActionDto("mark-done", "Merkitse allekirjoitetuksi",
-                TaskRowActionKinds.MarkDone, Destructive: false,
-                Confirm: new TaskConfirmDto("Vahvistus", "Allekirjoitus merkitään valmiiksi."),
-                Href: null),
-            new TaskRowActionDto("cancel", "Peruuta",
-                TaskRowActionKinds.Cancel, Destructive: true,
-                Confirm: new TaskConfirmDto("Peruuta",
-                    "Peruutetaanko tehtävä? Toiminto kirjataan auditiin."),
-                Href: null),
-        ],
-
-        TaskTypeNames.InboxTermination or TaskTypeNames.InboxSigned =>
-        [
-            new TaskRowActionDto("mark-done", "Merkitse käsitellyksi",
-                TaskRowActionKinds.MarkDone, Destructive: false,
-                Confirm: new TaskConfirmDto("Vahvistus", "Tehtävä merkitään käsitellyksi."),
-                Href: null),
-        ],
-
-        _ =>
-        [
-            new TaskRowActionDto("navigate-unit", "Avaa kohde Lumo Verkossa",
-                TaskRowActionKinds.External, Destructive: false, Confirm: null,
-                Href: "https://www.lumo.fi/"),
-            new TaskRowActionDto("mark-done", "Merkitse tehdyksi",
-                TaskRowActionKinds.MarkDone, Destructive: false,
-                Confirm: new TaskConfirmDto("Vahvistus", "Tehtävä merkitään tehdyksi. Jatka?"),
-                Href: null),
-            new TaskRowActionDto("cancel", "Peruuta",
-                TaskRowActionKinds.Cancel, Destructive: true,
-                Confirm: new TaskConfirmDto("Peruuta",
-                    "Peruutetaanko tehtävä? Toiminto kirjataan auditiin."),
-                Href: null),
-        ],
-    };
-
-    private static TaskNoteDto BuildNote(TaskDto card)
-    {
-        var body = card.Type switch
-        {
-            TaskTypeNames.VisitIntroduction or TaskTypeNames.VisitReservation
-                => "Asiakas on muuttamassa kohti pääkaupunkiseutua. Painottaa rauhallista naapurustoa.",
-            TaskTypeNames.InboxTermination
-                => "Asiakas vahvisti irtisanomisen sähköpostissa 30.4. Ei lisätietoja.",
-            _ => string.Empty,
-        };
-        return new TaskNoteDto(
-            Id: $"note-{card.Id}",
-            Body: body,
-            UpdatedAt: DateTimeOffset.UtcNow);
-    }
-
-    private static string TypeLabelFor(string type) => type switch
-    {
-        TaskTypeNames.VisitIntroduction  => "Tutustumiskäynti",
-        TaskTypeNames.VisitReservation   => "Varausesittely",
-        TaskTypeNames.OpenHouse          => "Yleisesittely",
-        TaskTypeNames.SignaturePending   => "Allekirjoitus",
-        TaskTypeNames.InboxTermination   => "Saapunut irtisanominen",
-        TaskTypeNames.InboxSigned        => "Allekirjoitettu palautunut",
-        TaskTypeNames.PhotoScheduled     => "Valokuvaus",
-        TaskTypeNames.RenovationApproval => "Remontti",
-        TaskTypeNames.LeadCallback       => "Liidi",
-        TaskTypeNames.DeskListItem       => "Tiskilista",
-        _                                => "Tehtävä",
-    };
 
     public Task<TasksResponseDto> ListAsync(
         ClaimsPrincipal principal,
         TaskQueryParameters query,
         CancellationToken cancellationToken = default)
     {
-        var nowHelsinki = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HelsinkiTz);
-        var groups = BuildMockGroups(nowHelsinki);
-
-        var filtered = groups
-            .Select(g => g with
-            {
-                Tasks = g.Tasks
-                    .Where(t => query.Types is null || query.Types.Count == 0 || query.Types.Contains(t.Type))
-                    .Where(t => !query.UrgentOnly || t.Urgent)
-                    .ToList()
-            })
-            .Where(g => g.Tasks.Count > 0)
-            .ToList();
-
-        var total = filtered.Sum(g => g.Tasks.Count);
-        return Task.FromResult(new TasksResponseDto(filtered, total, DateTimeOffset.UtcNow));
-    }
-
-    private static List<TaskGroupDto> BuildMockGroups(DateTime nowHelsinki)
-    {
-        var today = DateOnly.FromDateTime(nowHelsinki);
-        return
-        [
-            new TaskGroupDto(
-                TaskGroupIds.Today,
-                "Tänään",
-                FormatDate(today),
-                Today()),
-            new TaskGroupDto(
-                TaskGroupIds.Tomorrow,
-                "Huomenna",
-                FormatDate(today.AddDays(1)),
-                Tomorrow()),
-            new TaskGroupDto(
-                TaskGroupIds.ThisWeek,
-                "Tällä viikolla",
-                FormatDate(EndOfWeek(today)),
-                ThisWeek()),
-            new TaskGroupDto(
-                TaskGroupIds.Later,
-                "Myöhemmin",
-                FormatDate(today.AddDays(14)),
-                Later()),
-        ];
-    }
-
-    private static List<TaskDto> Today() =>
-    [
-        new(
-            "mock-today-1",
-            TaskTypeNames.SignaturePending,
-            TaskAccents.Cta,
-            Urgent: true,
-            new TaskWhenDto("Heti", "odottaa 3 pv", 0),
-            "Allekirjoitusta odottaa",
-            "Asiakas_001",
-            "Vänrikinkatu 2 · 2H+K · 48,5 m²",
-            TypeLabel: null,
-            [
-                new TaskActionDto(TaskActionKinds.Navigate, "Avaa tarjous", Primary: true,  Destructive: false, "/contracts/mock-1"),
-                new TaskActionDto(TaskActionKinds.Phone,    "Soita",         Primary: false, Destructive: false, "tel:+358000000"),
-            ],
-            new TaskEntityRefDto("asma", "Tarjous", "mock-1"),
-            SortOrder: 0),
-
-        new(
-            "mock-today-2",
-            TaskTypeNames.VisitIntroduction,
-            TaskAccents.Navy,
-            Urgent: false,
-            new TaskWhenDto("10:30", "Kesto 30 min", UnixMs("10:30")),
-            "Mannerheimintie 12 A 4",
-            "Asiakas_002 · 044 PLACEHOLDER",
-            "Esittelijä Esittelijä_A",
-            TypeLabel: null,
-            [
-                new TaskActionDto(TaskActionKinds.Navigate, "Avaa kohde", Primary: true,  Destructive: false, null),
-                new TaskActionDto(TaskActionKinds.Phone,    "Soita",      Primary: false, Destructive: false, "tel:+358000001"),
-                new TaskActionDto(TaskActionKinds.Sms,      "Viesti",     Primary: false, Destructive: false, "sms:+358000001"),
-            ],
-            new TaskEntityRefDto("core", "Tutustumiskaynti", "mock-2"),
-            SortOrder: 1),
-
-        new(
-            "mock-today-3",
-            TaskTypeNames.OpenHouse,
-            TaskAccents.Navy,
-            Urgent: false,
-            new TaskWhenDto("14:00", "Kesto 15 min", UnixMs("14:00")),
-            "Maauunintie 23 A 2, 01450 Vantaa",
-            null,
-            "4 ilmoittautunutta · Tervetuloa esittelyyn, A-rapun edessä",
-            TypeLabel: null,
-            [
-                new TaskActionDto(TaskActionKinds.Navigate, "Avaa esittely", Primary: true, Destructive: false, null),
-            ],
-            new TaskEntityRefDto("core", "Yleisesittely", "mock-3"),
-            SortOrder: 2),
-
-        new(
-            "mock-today-4",
-            TaskTypeNames.InboxTermination,
-            TaskAccents.Info,
-            Urgent: false,
-            new TaskWhenDto("Tänään", "käsittele", 0),
-            "Saapunut irtisanominen",
-            "Asiakas_003",
-            "Sopimus #SOP-PLACEHOLDER · Vänrikinkatu 2",
-            TypeLabel: null,
-            [
-                new TaskActionDto(TaskActionKinds.Navigate, "Käsittele", Primary: true, Destructive: false, null),
-            ],
-            new TaskEntityRefDto("asma", "Irtisanomisilmoitus", "mock-4"),
-            SortOrder: 3),
-    ];
-
-    private static List<TaskDto> Tomorrow() =>
-    [
-        new(
-            "mock-tomorrow-1",
-            TaskTypeNames.VisitReservation,
-            TaskAccents.Navy,
-            Urgent: false,
-            new TaskWhenDto("09:00", "Kesto 30 min", UnixMs("09:00", days: 1)),
-            "Asemakuja 1 B 69, 02770 Espoo",
-            "Päähakija Asiakas_004",
-            "Varattu · Sopimustila Toistaiseksi",
-            TypeLabel: null,
-            [
-                new TaskActionDto(TaskActionKinds.Navigate, "Avaa varausesittely", Primary: true, Destructive: false, null),
-            ],
-            new TaskEntityRefDto("core", "Varausesittely", "mock-5"),
-            SortOrder: 0),
-
-        new(
-            "mock-tomorrow-2",
-            TaskTypeNames.PhotoScheduled,
-            TaskAccents.Navy,
-            Urgent: false,
-            new TaskWhenDto("13:00", "Kuvauspalvelu", UnixMs("13:00", days: 1)),
-            "Hämeenkatu 7, 33100 Tampere",
-            null,
-            "Kuvaaja paikalla 1 h · tilaaja Esittelijä_B",
-            TypeLabel: null,
-            [
-                new TaskActionDto(TaskActionKinds.Navigate, "Avaa kohde", Primary: true,  Destructive: false, null),
-                new TaskActionDto(TaskActionKinds.Cancel,   "Peruuta",    Primary: false, Destructive: true,  null),
-            ],
-            new TaskEntityRefDto("asma", "Valokuvaus", "mock-6"),
-            SortOrder: 1),
-
-        new(
-            "mock-tomorrow-3",
-            TaskTypeNames.LeadCallback,
-            TaskAccents.Navy,
-            Urgent: false,
-            new TaskWhenDto("15:00", "soittopyyntö", UnixMs("15:00", days: 1)),
-            "Liidi: kiinnostunut kahdesta kohteesta",
-            "Asiakas_005",
-            "Viimeinen kontakti 3 pv sitten",
-            TypeLabel: null,
-            [
-                new TaskActionDto(TaskActionKinds.Phone,    "Soita",                Primary: true,  Destructive: false, "tel:+358000002"),
-                new TaskActionDto(TaskActionKinds.MarkDone, "Merkitse tehdyksi",    Primary: false, Destructive: false, null),
-            ],
-            new TaskEntityRefDto("asma", "Liidi", "mock-7"),
-            SortOrder: 2),
-    ];
-
-    private static List<TaskDto> ThisWeek() =>
-    [
-        new(
-            "mock-week-tehtava-1",
-            TaskTypeNames.GenericTask,
-            TaskAccents.Warn,
-            Urgent: false,
-            new TaskWhenDto("Ke", "Valmis viimeistään 7.5.", UnixMs("09:00", days: 3)),
-            "Hinnoittelun tarkistus uusilla kohteilla",
-            "Huoneisto: Vänrikinkatu 2 A 4, 00150 Helsinki",
-            "Tehtävätyyppi Hinnoittelu · Priority High · Status NotStarted",
-            TypeLabel: "Hinnoittelu",
-            [
-                new TaskActionDto(TaskActionKinds.Navigate, "Avaa tehtävä",       Primary: true,  Destructive: false, null),
-                new TaskActionDto(TaskActionKinds.MarkDone, "Merkitse tehdyksi",  Primary: false, Destructive: false, null),
-            ],
-            new TaskEntityRefDto("core", "xVasuSecuritySystemUserTask", "mock-tehtava-1"),
-            SortOrder: 0),
-
-        new(
-            "mock-week-tehtava-2",
-            TaskTypeNames.GenericTask,
-            TaskAccents.Navy,
-            Urgent: false,
-            new TaskWhenDto("To", "Valmis viimeistään 8.5.", UnixMs("09:00", days: 4)),
-            "Muuttotarkastus sopimuksen päättyessä",
-            "Sopimus #SOP-PLACEHOLDER · Tilakoodi \"Päättyy\"",
-            "Tehtävätyyppi Tarkastus · Priority Normal · Status InProgress · 40 % valmiina",
-            TypeLabel: "Tarkastus",
-            [
-                new TaskActionDto(TaskActionKinds.Navigate, "Avaa tehtävä", Primary: true, Destructive: false, null),
-            ],
-            new TaskEntityRefDto("core", "xVasuSecuritySystemUserTask", "mock-tehtava-2"),
-            SortOrder: 1),
-
-        new(
-            "mock-week-1",
-            TaskTypeNames.RenovationApproval,
-            TaskAccents.Warn,
-            Urgent: false,
-            new TaskWhenDto("Pe", "tarkista", UnixMs("09:00", days: 5)),
-            "Remonttihyväksyntää odottaa",
-            null,
-            "Kohde B07 · keittiön pintaremontti",
-            TypeLabel: null,
-            [
-                new TaskActionDto(TaskActionKinds.Navigate, "Avaa remontti", Primary: true, Destructive: false, null),
-            ],
-            new TaskEntityRefDto("kire", "Remontti", "mock-8"),
-            SortOrder: 2),
-
-        new(
-            "mock-week-2",
-            TaskTypeNames.InboxSigned,
-            TaskAccents.Info,
-            Urgent: false,
-            new TaskWhenDto("To", null, UnixMs("12:00", days: 4)),
-            "Allekirjoitettu sopimus arkistoitavaksi",
-            "Asiakas_006",
-            "Sähköinen allekirjoitus palautunut",
-            TypeLabel: null,
-            [
-                new TaskActionDto(TaskActionKinds.MarkDone, "Merkitse käsitellyksi", Primary: true, Destructive: false, null),
-            ],
-            new TaskEntityRefDto("asma", "Allekirjoitustapahtuma", "mock-9"),
-            SortOrder: 3),
-    ];
-
-    private static List<TaskDto> Later() =>
-    [
-        new(
-            "mock-later-1",
-            TaskTypeNames.DeskListItem,
-            TaskAccents.Navy,
-            Urgent: false,
-            new TaskWhenDto("12.5.", "vapautuu", UnixMs("12:00", days: 14)),
-            "Tiskilistalle siirtyvä huoneisto",
-            null,
-            "Kohde C03 · 3H+K+S",
-            TypeLabel: null,
-            [
-                new TaskActionDto(TaskActionKinds.Navigate, "Avaa kohde", Primary: true, Destructive: false, null),
-            ],
-            new TaskEntityRefDto("kire", "Tiskilista", "mock-10"),
-            SortOrder: 0),
-    ];
-
-    private static long UnixMs(string hhmm, int days = 0)
-    {
-        var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HelsinkiTz);
-        var target = new DateTime(now.Year, now.Month, now.Day, 0, 0, 0, DateTimeKind.Unspecified)
-            .AddDays(days);
-        if (TimeOnly.TryParse(hhmm, FiCulture, DateTimeStyles.None, out var parsed))
+        // If the caller filtered to only non-generic types we don't yet cover, return empty.
+        if (query.Types is { Count: > 0 } && !query.Types.Contains(TaskTypeNames.GenericTask))
         {
-            target = target.AddHours(parsed.Hour).AddMinutes(parsed.Minute);
+            return Task.FromResult(EmptyResponse());
         }
-        var utc = TimeZoneInfo.ConvertTimeToUtc(target, HelsinkiTz);
+
+        var (user, os) = ResolveUser(principal);
+        if (user is null || os is null)
+        {
+            return Task.FromResult(EmptyResponse());
+        }
+
+        try
+        {
+            var nowHelsinki = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HelsinkiTz);
+            var today = DateOnly.FromDateTime(nowHelsinki);
+            var fromDate = query.From ?? today;
+            var toDate = query.To ?? today.AddDays(30);
+
+            var criteria = BuildCriteria(user.Oid, fromDate, toDate, query.UrgentOnly);
+            var session = ((XPObjectSpace)os).Session;
+            var collection = new XPCollection<XpoTask>(session, criteria);
+            collection.Sorting.Add(new SortProperty("DueDate", DevExpress.Xpo.DB.SortingDirection.Ascending));
+
+            var dtos = collection.Select(t => MapCard(t, today)).ToList();
+            var groups = BucketByDay(dtos, today);
+            var total = groups.Sum(g => g.Tasks.Count);
+
+            return Task.FromResult(new TasksResponseDto(groups, total, DateTimeOffset.UtcNow));
+        }
+        finally
+        {
+            os.Dispose();
+        }
+    }
+
+    public Task<TaskDetailDto?> GetAsync(
+        ClaimsPrincipal principal,
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Guid.TryParse(id, out var oid))
+        {
+            return Task.FromResult<TaskDetailDto?>(null);
+        }
+
+        var (user, os) = ResolveUser(principal);
+        if (user is null || os is null)
+        {
+            return Task.FromResult<TaskDetailDto?>(null);
+        }
+
+        try
+        {
+            var task = os.GetObjectByKey<XpoTask>(oid);
+            if (task is null)
+            {
+                return Task.FromResult<TaskDetailDto?>(null);
+            }
+
+            if (!IsVisibleTo(task, user.Oid))
+            {
+                logger.LogInformation("Task {Oid} access denied for user {UserOid}", oid, user.Oid);
+                return Task.FromResult<TaskDetailDto?>(null);
+            }
+
+            var nowHelsinki = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HelsinkiTz);
+            var today = DateOnly.FromDateTime(nowHelsinki);
+            return Task.FromResult<TaskDetailDto?>(MapDetail(task, today));
+        }
+        finally
+        {
+            os.Dispose();
+        }
+    }
+
+    private (xVasuSecuritySystemUser? user, IObjectSpace? os) ResolveUser(ClaimsPrincipal principal)
+    {
+        var os = objectSpaceProvider.CreateObjectSpace();
+
+        var email = EmailResolver.ResolveEmail(principal);
+        if (string.IsNullOrEmpty(email))
+        {
+            logger.LogWarning("Tasks request rejected — principal had no resolvable email");
+            os.Dispose();
+            return (null, null);
+        }
+
+        var variants = EmailResolver.BuildEmailVariants(email);
+        var resolved = os.FindObject<xVasuSecuritySystemUser>(EmailResolver.BuildUserCriteria(variants, email));
+        if (resolved is null)
+        {
+            logger.LogInformation("Tasks request rejected — user {Email} not provisioned", email);
+            os.Dispose();
+            return (null, null);
+        }
+
+        return (resolved, os);
+    }
+
+    private static CriteriaOperator BuildCriteria(Guid userOid, DateOnly from, DateOnly to, bool urgentOnly)
+    {
+        var operands = new List<CriteriaOperator>
+        {
+            // Visibility: Owner OR AssignedTo OR additional-user link
+            CriteriaOperator.Or(
+                new BinaryOperator("Owner.Oid", userOid),
+                new BinaryOperator("AssignedTo.Oid", userOid),
+                new ContainsOperator("xVasuUserTaskAdditionalUsers", new BinaryOperator("UserID.Oid", userOid))),
+
+            // Hide finished work
+            new BinaryOperator("Status", XpoTaskStatus.Completed, BinaryOperatorType.NotEqual),
+        };
+
+        var fromDt = from.ToDateTime(TimeOnly.MinValue);
+        var toDt = to.ToDateTime(new TimeOnly(23, 59, 59));
+
+        // Include rows with no DueDate (default DateTime in legacy data) so they
+        // surface as "Today" rather than disappearing.
+        operands.Add(CriteriaOperator.Or(
+            new BinaryOperator("DueDate", new DateTime(1900, 1, 1), BinaryOperatorType.Less),
+            CriteriaOperator.And(
+                new BinaryOperator("DueDate", fromDt, BinaryOperatorType.GreaterOrEqual),
+                new BinaryOperator("DueDate", toDt, BinaryOperatorType.LessOrEqual))));
+
+        if (urgentOnly)
+        {
+            operands.Add(new BinaryOperator("Priority", XpoPriority.High, BinaryOperatorType.Equal));
+        }
+
+        return CriteriaOperator.And(operands);
+    }
+
+    private static bool IsVisibleTo(XpoTask t, Guid userOid)
+    {
+        if (t.Owner?.Oid == userOid) return true;
+        if (t.AssignedTo?.Oid == userOid) return true;
+        return t.xVasuUserTaskAdditionalUsers.OfType<xVasuUserTaskAdditionalUser>()
+            .Any(au => au.UserID?.Oid == userOid);
+    }
+
+    private static TaskDto MapCard(XpoTask t, DateOnly today)
+    {
+        var due = ExtractDueDate(t);
+        var when = FormatWhen(due, today);
+        var (accent, urgent) = DeriveAccent(t.Priority, due, today);
+        var typeLabel = t.UserTaskType?.Name;
+        var who = ResolveWho(t);
+        var meta = ResolveMeta(t);
+
+        return new TaskDto(
+            Id: t.Oid.ToString(),
+            Type: TaskTypeNames.GenericTask,
+            Accent: accent,
+            Urgent: urgent,
+            When: when,
+            Title: string.IsNullOrWhiteSpace(t.Subject) ? "Tehtävä" : t.Subject,
+            Who: who,
+            Meta: meta,
+            TypeLabel: typeLabel,
+            Actions:
+            [
+                new TaskActionDto(TaskActionKinds.Navigate, "Avaa tehtävä", Primary: true, Destructive: false, Href: null),
+                new TaskActionDto(TaskActionKinds.MarkDone, "Merkitse tehdyksi", Primary: false, Destructive: false, Href: null),
+            ],
+            EntityRef: new TaskEntityRefDto("core", "xVasuSecuritySystemUserTask", t.Oid.ToString()),
+            SortOrder: when.SortOrder == 0 ? 0 : (int?)null);
+    }
+
+    private static TaskDetailDto MapDetail(XpoTask t, DateOnly today)
+    {
+        var due = ExtractDueDate(t);
+        var when = FormatWhen(due, today);
+        var (accent, _) = DeriveAccent(t.Priority, due, today);
+        var typeLabel = t.UserTaskType?.Name ?? "Tehtävä";
+        var meta = ResolveMeta(t);
+
+        var subtitleParts = new List<string>(3);
+        if (!string.IsNullOrWhiteSpace(meta)) subtitleParts.Add(meta!);
+        subtitleParts.Add($"Status {t.Status}");
+        subtitleParts.Add($"Priority {t.Priority}");
+
+        var timeContext = string.IsNullOrEmpty(when.Note)
+            ? when.Time
+            : $"{when.Time} · {when.Note}";
+
+        var actions = new List<TaskRowActionDto>
+        {
+            new("mark-done", "Merkitse tehdyksi",
+                TaskRowActionKinds.MarkDone, Destructive: false,
+                Confirm: new TaskConfirmDto("Vahvistus", "Tehtävä merkitään tehdyksi. Jatka?"),
+                Href: null),
+            new("cancel", "Peruuta",
+                TaskRowActionKinds.Cancel, Destructive: true,
+                Confirm: new TaskConfirmDto("Peruuta",
+                    "Peruutetaanko tehtävä? Toiminto kirjataan auditiin."),
+                Href: null),
+        };
+
+        var note = string.IsNullOrWhiteSpace(t.Description)
+            ? null
+            : new TaskNoteDto($"note-{t.Oid}", t.Description, DateTimeOffset.UtcNow);
+
+        return new TaskDetailDto(
+            Id: t.Oid.ToString(),
+            Type: TaskTypeNames.GenericTask,
+            TypeLabel: typeLabel,
+            Accent: accent,
+            TimeContext: timeContext,
+            Title: string.IsNullOrWhiteSpace(t.Subject) ? "Tehtävä" : t.Subject,
+            Subtitle: string.Join(" · ", subtitleParts),
+            Customer: null,
+            Actions: actions,
+            Note: note,
+            PrimaryCta: new TaskActionDto(
+                TaskActionKinds.Navigate, "Avaa kohde", Primary: true, Destructive: false, Href: null),
+            EntityRef: new TaskEntityRefDto("core", "xVasuSecuritySystemUserTask", t.Oid.ToString()));
+    }
+
+    private static DateTime? ExtractDueDate(XpoTask t)
+    {
+        var due = t.DueDate;
+        // Legacy default value (XAF stores DateTime.MinValue or near-min for "unset")
+        if (due < new DateTime(1900, 1, 1)) return null;
+        return due;
+    }
+
+    private static string? ResolveWho(XpoTask t)
+    {
+        // Show the *other* party so the row tells the user what they need to know
+        // — assigned-to from the owner's perspective, owner from the assignee's.
+        var assignee = t.AssignedTo?.Kokonimi;
+        var owner = t.Owner?.Kokonimi;
+        if (!string.IsNullOrWhiteSpace(assignee)) return assignee;
+        if (!string.IsNullOrWhiteSpace(owner)) return owner;
+        return null;
+    }
+
+    private static string? ResolveMeta(XpoTask t)
+    {
+        // Prefer the most specific anchor: Huoneisto > Sopimus > Kohde.
+        if (t.Huoneisto is not null)
+        {
+            // Huoneisto.ToString() returns the address-shaped header; reflection
+            // confirms the Huoneisto type lives in xVasu.Data.Kire.
+            var header = t.Huoneisto.ToString();
+            if (!string.IsNullOrWhiteSpace(header)) return header;
+        }
+        if (t.Sopimus is not null)
+        {
+            var s = t.Sopimus.ToString();
+            if (!string.IsNullOrWhiteSpace(s)) return s;
+        }
+        if (t.Kohde is not null)
+        {
+            // Kustannuspaikka.Header is a PersistentAlias that composes
+            // "{Kptunnus} - {KpNimi} {Kunta} {Osoite}".
+            var h = t.Kohde.Header;
+            if (!string.IsNullOrWhiteSpace(h)) return h;
+        }
+        return null;
+    }
+
+    private static (string accent, bool urgent) DeriveAccent(XpoPriority priority, DateTime? due, DateOnly today)
+    {
+        var overdue = due is { } d && DateOnly.FromDateTime(d) < today;
+        if (priority == XpoPriority.High || overdue) return (TaskAccents.Warn, true);
+        if (priority == XpoPriority.Low) return (TaskAccents.Info, false);
+        return (TaskAccents.Navy, false);
+    }
+
+    private static TaskWhenDto FormatWhen(DateTime? due, DateOnly today)
+    {
+        if (due is null)
+        {
+            return new TaskWhenDto("Eräpäivä avoin", null, 0);
+        }
+
+        var dueDate = DateOnly.FromDateTime(due.Value);
+        var hasTime = due.Value.TimeOfDay > TimeSpan.Zero;
+        var sortOrder = ToUnixMs(due.Value);
+
+        if (dueDate < today)
+        {
+            var overdueDays = today.DayNumber - dueDate.DayNumber;
+            return new TaskWhenDto("Heti", overdueDays > 0 ? $"myöhässä {overdueDays} pv" : null, 0);
+        }
+
+        if (dueDate == today)
+        {
+            return hasTime
+                ? new TaskWhenDto(due.Value.ToString("HH:mm", FiCulture), null, sortOrder)
+                : new TaskWhenDto("Tänään", null, sortOrder);
+        }
+
+        if (dueDate == today.AddDays(1))
+        {
+            return hasTime
+                ? new TaskWhenDto($"Huomenna klo {due.Value:HH\\:mm}", null, sortOrder)
+                : new TaskWhenDto("Huomenna", null, sortOrder);
+        }
+
+        if (dueDate <= EndOfWeek(today))
+        {
+            var weekday = FiCulture.DateTimeFormat.GetAbbreviatedDayName(due.Value.DayOfWeek);
+            return new TaskWhenDto(
+                CapitaliseFirst(weekday),
+                $"Valmis viimeistään {due.Value.Day}.{due.Value.Month}.",
+                sortOrder);
+        }
+
+        return new TaskWhenDto($"{due.Value.Day}.{due.Value.Month}.", null, sortOrder);
+    }
+
+    private static IReadOnlyList<TaskGroupDto> BucketByDay(IList<TaskDto> dtos, DateOnly today)
+    {
+        var todays = new List<TaskDto>();
+        var tomorrows = new List<TaskDto>();
+        var weeks = new List<TaskDto>();
+        var laters = new List<TaskDto>();
+
+        var endOfWeek = EndOfWeek(today);
+        var tomorrow = today.AddDays(1);
+
+        foreach (var dto in dtos)
+        {
+            var date = DateFromUnix(dto.When.SortOrder);
+            if (date is null || date.Value <= today)
+            {
+                todays.Add(dto);
+            }
+            else if (date.Value == tomorrow)
+            {
+                tomorrows.Add(dto);
+            }
+            else if (date.Value <= endOfWeek)
+            {
+                weeks.Add(dto);
+            }
+            else
+            {
+                laters.Add(dto);
+            }
+        }
+
+        var groups = new List<TaskGroupDto>(4);
+        if (todays.Count > 0) groups.Add(new TaskGroupDto(TaskGroupIds.Today, "Tänään", FormatDate(today), todays));
+        if (tomorrows.Count > 0) groups.Add(new TaskGroupDto(TaskGroupIds.Tomorrow, "Huomenna", FormatDate(tomorrow), tomorrows));
+        if (weeks.Count > 0) groups.Add(new TaskGroupDto(TaskGroupIds.ThisWeek, "Tällä viikolla", FormatDate(endOfWeek), weeks));
+        if (laters.Count > 0) groups.Add(new TaskGroupDto(TaskGroupIds.Later, "Myöhemmin", FormatDate(today.AddDays(14)), laters));
+        return groups;
+    }
+
+    private static DateOnly? DateFromUnix(long unixMs)
+    {
+        if (unixMs == 0) return null;
+        var local = TimeZoneInfo.ConvertTimeFromUtc(
+            DateTimeOffset.FromUnixTimeMilliseconds(unixMs).UtcDateTime,
+            HelsinkiTz);
+        return DateOnly.FromDateTime(local);
+    }
+
+    private static long ToUnixMs(DateTime localDt)
+    {
+        // Treat XPO DateTime as Helsinki-local since XAF persists naive timestamps.
+        var unspecified = DateTime.SpecifyKind(localDt, DateTimeKind.Unspecified);
+        var utc = TimeZoneInfo.ConvertTimeToUtc(unspecified, HelsinkiTz);
         return new DateTimeOffset(utc, TimeSpan.Zero).ToUnixTimeMilliseconds();
     }
 
     private static DateOnly EndOfWeek(DateOnly d)
     {
         var dow = (int)d.DayOfWeek;
-        var offset = dow == 0 ? 0 : 7 - dow;        // sunday → 0, monday → 6, …
+        var offset = dow == 0 ? 0 : 7 - dow;        // Sunday → 0, Monday → 6, …
         return d.AddDays(offset);
     }
 
     private static string FormatDate(DateOnly d)
     {
-        // Short Finnish weekday + day.month — matches frontend's existing
-        // FI_DATE format (e.g. "la 4.5.").
         var dt = d.ToDateTime(TimeOnly.MinValue);
-        return $"{FiCulture.DateTimeFormat.GetAbbreviatedDayName(dt.DayOfWeek)} {dt.Day}.{dt.Month}.";
+        var weekday = FiCulture.DateTimeFormat.GetAbbreviatedDayName(dt.DayOfWeek);
+        return $"{weekday} {dt.Day}.{dt.Month}.";
     }
+
+    private static string CapitaliseFirst(string s) =>
+        string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s[1..];
+
+    private static TasksResponseDto EmptyResponse() =>
+        new(Array.Empty<TaskGroupDto>(), 0, DateTimeOffset.UtcNow);
 
     private static TimeZoneInfo ResolveHelsinkiTimeZone()
     {
