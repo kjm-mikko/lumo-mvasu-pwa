@@ -135,20 +135,22 @@ public sealed class TiskilistaQueryService(
 
         if (string.Equals(query.Scope, "omat", StringComparison.OrdinalIgnoreCase))
         {
-            // Tiskilista.Aluetoimisto is denormalized to a string; the user's
-            // string list lives on xVasuSecuritySystemUser.AlueToimistot already.
-            var allowed = user.AlueToimistot?.Where(s => !string.IsNullOrEmpty(s))
-                .Cast<object>()
-                .ToArray() ?? Array.Empty<object>();
-
-            if (allowed.Length == 0)
+            // Tiskilista.BranchCode is the canonical area key compared against
+            // the user's Kayttooikeudet branchcodes. UserAreaScope collapses
+            // the user's permission codes — code "999" means "all areas, no
+            // restriction" so we skip the area filter entirely.
+            var scope = UserAreaScope.Resolve(user);
+            if (!scope.Unrestricted)
             {
-                // User has no Aluetoimisto allocations — return guaranteed-empty result.
-                operands.Add(new BinaryOperator("OID", Guid.Empty, BinaryOperatorType.Equal));
-            }
-            else
-            {
-                operands.Add(new InOperator("Aluetoimisto", allowed));
+                if (scope.Areas.Count == 0)
+                {
+                    // User has no branchcodes — return guaranteed-empty result.
+                    operands.Add(new BinaryOperator("OID", Guid.Empty, BinaryOperatorType.Equal));
+                }
+                else
+                {
+                    operands.Add(new InOperator("BranchCode", scope.Areas.Cast<object>().ToArray()));
+                }
             }
         }
 
