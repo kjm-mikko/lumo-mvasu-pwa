@@ -85,6 +85,13 @@ const APP_VERSION = 'Lumo mVasu · v0.2.0';
     <main class="more">
       <section class="topbar">
         <h1 class="title">Lisää</h1>
+        <dx-button
+          class="topbar-search"
+          icon="search"
+          stylingMode="text"
+          [elementAttr]="{ 'aria-label': 'Avaa pikahaku' }"
+          (onClick)="openQuickSearch()"
+        ></dx-button>
       </section>
 
       @if (profile(); as p) {
@@ -320,6 +327,10 @@ export class MoreComponent {
 
   protected displayNameOf(p: UserProfileDto): string {
     return p.preferredName?.trim() || p.displayName || 'Lumolainen';
+  }
+
+  protected openQuickSearch(): void {
+    this.router.navigate(['/search']);
   }
 
   protected onModuleRow(event: { itemData?: MoreRow }): void {

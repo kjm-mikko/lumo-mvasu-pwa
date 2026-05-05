@@ -5,6 +5,10 @@ using Microsoft.Identity.Web;
 using mVasu.Api.Authentication;
 using mVasu.Api.Contracts;
 using mVasu.Api.Data;
+using mVasu.Api.Customers;
+using mVasu.Api.Search;
+using mVasu.Api.Tasks;
+using mVasu.Api.Tiskilista;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
@@ -53,6 +57,10 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddScoped<IUserResolver, XpoEmailUserResolver>();
 builder.Services.AddScoped<IUserSettingsService, XpoUserSettingsService>();
+builder.Services.AddScoped<ITiskilistaQueryService, TiskilistaQueryService>();
+builder.Services.AddScoped<ITaskQueryService, TaskQueryService>();
+builder.Services.AddScoped<ICustomerQueryService, CustomerQueryService>();
+builder.Services.AddScoped<ISearchService, SearchService>();
 
 builder.Services.AddVasuXpo(builder.Configuration);
 
@@ -238,6 +246,272 @@ app.MapPost("/api/me/location", async (
     })
     .WithName("RecordCurrentUserLocation")
     .WithSummary("Stores the user's latest known location. Requires location consent to be granted.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/tiskilista", async (
+        ClaimsPrincipal user,
+        ITiskilistaQueryService service,
+        string? q,
+        string? status,
+        string? laji,
+        string? tyyppi,
+        string? kunta,
+        string? kaupunginosa,
+        string? sopimustila,
+        float? neliotMin,
+        float? neliotMax,
+        DateOnly? vapautuuFrom,
+        DateOnly? vapautuuTo,
+        string? scope,
+        string? sortBy,
+        double? userLat,
+        double? userLon,
+        int? page,
+        int? pageSize,
+        CancellationToken ct) =>
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        var resolvedScope = string.IsNullOrWhiteSpace(scope) ? "omat" : scope;
+        if (!TiskilistaListQuery.ValidScopes.Contains(resolvedScope))
+        {
+            errors[nameof(scope)] = [$"scope must be one of: {string.Join(", ", TiskilistaListQuery.ValidScopes)}."];
+        }
+
+        var resolvedSort = string.IsNullOrWhiteSpace(sortBy) ? "vapautuu" : sortBy;
+        if (!TiskilistaListQuery.ValidSortBy.Contains(resolvedSort))
+        {
+            errors[nameof(sortBy)] = [$"sortBy must be one of: {string.Join(", ", TiskilistaListQuery.ValidSortBy)}."];
+        }
+
+        var resolvedPage = page ?? 1;
+        if (resolvedPage < 1)
+        {
+            errors[nameof(page)] = ["page must be >= 1."];
+        }
+
+        var resolvedPageSize = pageSize ?? 20;
+        if (resolvedPageSize < TiskilistaListQuery.MinPageSize || resolvedPageSize > TiskilistaListQuery.MaxPageSize)
+        {
+            errors[nameof(pageSize)] = [$"pageSize must be between {TiskilistaListQuery.MinPageSize} and {TiskilistaListQuery.MaxPageSize}."];
+        }
+
+        // Range bounds — bail rather than silently returning empty set.
+        if (neliotMin is { } nmin && neliotMax is { } nmax && nmin > nmax)
+        {
+            errors[nameof(neliotMin)] = ["neliotMin must be less than or equal to neliotMax."];
+        }
+        if (vapautuuFrom is { } vff && vapautuuTo is { } vft && vff > vft)
+        {
+            errors[nameof(vapautuuFrom)] = ["vapautuuFrom must be on or before vapautuuTo."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.ValidationProblem(errors);
+        }
+
+        static string[]? CommaList(string? raw) => string.IsNullOrWhiteSpace(raw)
+            ? null
+            : raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var query = new TiskilistaListQuery(
+            Search: q,
+            Status: status,
+            Lajit: CommaList(laji),
+            Tyypit: CommaList(tyyppi),
+            Kunnat: CommaList(kunta),
+            Kaupunginosat: CommaList(kaupunginosa),
+            Sopimustilat: CommaList(sopimustila),
+            NeliotMin: neliotMin,
+            NeliotMax: neliotMax,
+            VapautuuFrom: vapautuuFrom,
+            VapautuuTo: vapautuuTo,
+            Scope: resolvedScope,
+            SortBy: resolvedSort,
+            UserLat: userLat,
+            UserLon: userLon,
+            Page: resolvedPage,
+            PageSize: resolvedPageSize);
+
+        var result = await service.ListAsync(user, query, ct);
+        return result is null
+            ? Results.Problem(
+                title: "User not provisioned",
+                detail: "Authenticated principal could not be resolved to a Lumo mVasu user.",
+                statusCode: StatusCodes.Status403Forbidden)
+            : Results.Ok(result);
+    })
+    .WithName("GetTiskilista")
+    .WithSummary("Lists Tiskilista entries filtered by scope, status and free text. Optional distance sort uses userLat/userLon.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/tiskilista/distinct-values", async (
+        ClaimsPrincipal user,
+        ITiskilistaQueryService service,
+        CancellationToken ct) =>
+    {
+        var values = await service.GetDistinctValuesAsync(user, ct);
+        return values is null
+            ? Results.Problem(
+                title: "User not provisioned",
+                detail: "Authenticated principal could not be resolved to a Lumo mVasu user.",
+                statusCode: StatusCodes.Status403Forbidden)
+            : Results.Ok(values);
+    })
+    .WithName("GetTiskilistaDistinctValues")
+    .WithSummary("Returns sorted distinct dimensions (laji, tyyppi, kunta, kaupunginosa, sopimustila, isannoitsija, tila) " +
+                 "scoped to the user's BranchCode visibility — used to populate filter dropdowns.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/tiskilista/{id:guid}", async (
+        Guid id,
+        ClaimsPrincipal user,
+        ITiskilistaQueryService service,
+        CancellationToken ct) =>
+    {
+        var detail = await service.GetAsync(user, id, ct);
+        return detail is null
+            ? Results.NotFound()
+            : Results.Ok(detail);
+    })
+    .WithName("GetTiskilistaById")
+    .WithSummary("Returns the full Tiskilista detail by Oid.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/tasks", async (
+        ClaimsPrincipal user,
+        ITaskQueryService service,
+        DateOnly? from,
+        DateOnly? to,
+        string? userId,
+        string? types,
+        bool? urgentOnly,
+        CancellationToken ct) =>
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (from is not null && to is not null && from > to)
+        {
+            errors[nameof(from)] = ["from must be on or before to."];
+        }
+
+        var typeList = string.IsNullOrWhiteSpace(types)
+            ? null
+            : types.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (errors.Count > 0)
+        {
+            return Results.ValidationProblem(errors);
+        }
+
+        var query = new TaskQueryParameters(
+            From: from,
+            To: to,
+            UserId: string.IsNullOrWhiteSpace(userId) ? "me" : userId,
+            Types: typeList,
+            UrgentOnly: urgentOnly ?? false);
+
+        var result = await service.ListAsync(user, query, ct);
+        return Results.Ok(result);
+    })
+    .WithName("GetTasks")
+    .WithSummary("Aggregates the day-grouped task queue for the authenticated user. " +
+                 "Phase 1 returns a fixed mock fixture; Phase 2 will run XPO queries " +
+                 "across the XAF entity sources listed in BACKEND.md §2.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/tasks/{id}", async (
+        string id,
+        ClaimsPrincipal user,
+        ITaskQueryService service,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return Results.BadRequest();
+        }
+
+        var detail = await service.GetAsync(user, id, ct);
+        return detail is null
+            ? Results.NotFound()
+            : Results.Ok(detail);
+    })
+    .WithName("GetTaskById")
+    .WithSummary("Returns the full task detail for the given id. Phase 1 looks the " +
+                 "row up in the mock fixture; Phase 2 will resolve the XAF entity " +
+                 "via the row's EntityRef.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/customers", async (
+        ClaimsPrincipal user,
+        ICustomerQueryService service,
+        string? q,
+        string? type,
+        string? relation,
+        string? city,
+        CancellationToken ct) =>
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (!string.IsNullOrWhiteSpace(type) && !CustomerTypes.Valid.Contains(type))
+        {
+            errors[nameof(type)] = [$"type must be one of: {string.Join(", ", CustomerTypes.Valid)}."];
+        }
+
+        if (!string.IsNullOrWhiteSpace(relation) && !CustomerRelationFilters.Valid.Contains(relation))
+        {
+            errors[nameof(relation)] =
+                [$"relation must be one of: {string.Join(", ", CustomerRelationFilters.Valid)}."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.ValidationProblem(errors);
+        }
+
+        var query = new CustomerQueryParameters(
+            Search: q,
+            Type: string.IsNullOrWhiteSpace(type) ? null : type,
+            Relation: string.IsNullOrWhiteSpace(relation) ? null : relation,
+            City: string.IsNullOrWhiteSpace(city) ? null : city);
+
+        var result = await service.ListAsync(user, query, ct);
+        return Results.Ok(result);
+    })
+    .WithName("GetCustomers")
+    .WithSummary("Lists Asiakkaat (Henkilö / Yritys / Yhteyshenkilö) sorted fi-FI " +
+                 "by displayName. Phase 1 returns a mock fixture; Phase 2 projects " +
+                 "from xVasu.Data.Asma.Henkilo / Yritys / Yhteyshenkilo with related-" +
+                 "entity counts (Hakemus, SopimusVaraus, Sopimus, Tarjous, Esittely).")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/search", async (
+        ClaimsPrincipal user,
+        ISearchService service,
+        string? q,
+        int? limit,
+        CancellationToken ct) =>
+    {
+        var resolvedLimit = limit ?? 5;
+        if (resolvedLimit < 1 || resolvedLimit > 50)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(limit)] = ["limit must be between 1 and 50."],
+            });
+        }
+
+        var query = new SearchQueryParameters(Q: q, Limit: resolvedLimit);
+        var result = await service.SearchAsync(user, query, ct);
+        return Results.Ok(result);
+    })
+    .WithName("Search")
+    .WithSummary("Long-tail global search across XAF entity tables (units, people, " +
+                 "contracts) and the static action catalogue. Min query length 2; " +
+                 "shorter inputs return an empty group list. Phase 1 runs against " +
+                 "the local mock fixture; Phase 2 will use Postgres tsvector / " +
+                 "pg_trgm fuzzy match.")
     .RequireAuthorization(AccessAsUserPolicy);
 
 try

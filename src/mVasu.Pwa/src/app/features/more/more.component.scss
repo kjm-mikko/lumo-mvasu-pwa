@@ -20,6 +20,9 @@
 }
 
 .topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-sm);
   padding: var(--lumo-space-sm) 0 0;
 }
 
@@ -29,7 +32,11 @@
   font-size: 22px;
   color: var(--lumo-text-primary);
   margin: 0;
+  flex: 1;
+  min-width: 0;
 }
+
+.topbar-search { flex: 0 0 auto; }
 
 .me-card {
   display: flex;

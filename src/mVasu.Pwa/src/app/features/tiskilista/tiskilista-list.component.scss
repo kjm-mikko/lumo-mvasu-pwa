@@ -1,0 +1,345 @@
+.tiskilista {
+  padding: var(--lumo-space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-lg);
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lumo-space-md);
+
+  .header-text {
+    display: flex;
+    align-items: baseline;
+    gap: var(--lumo-space-md);
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .header-search { flex: 0 0 auto; }
+
+  h1 {
+    font-family: var(--lumo-font-heading);
+    font-size: var(--lumo-fs-display);
+    margin: 0;
+  }
+  .count {
+    color: var(--lumo-text-secondary);
+    font-size: var(--lumo-fs-small);
+  }
+}
+
+.filters {
+  display: flex;
+  gap: var(--lumo-space-md);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.search {
+  flex: 1 1 280px;
+  min-width: 200px;
+  background: var(--lumo-surface-elevated);
+  color: var(--lumo-text-primary);
+  border: 1px solid var(--lumo-border);
+  border-radius: var(--lumo-radius-md);
+  padding: var(--lumo-space-sm) var(--lumo-space-md);
+  font: inherit;
+  min-height: 44px;
+  &:focus {
+    outline: none;
+    border-color: var(--lumo-primary);
+    box-shadow: 0 0 0 3px var(--lumo-focus-ring);
+  }
+}
+
+.chips {
+  display: inline-flex;
+  border: 1px solid var(--lumo-border);
+  border-radius: var(--lumo-radius-full);
+  overflow: hidden;
+  background: var(--lumo-surface-elevated);
+
+  button {
+    background: transparent;
+    border: none;
+    padding: var(--lumo-space-sm) var(--lumo-space-md);
+    color: var(--lumo-text-secondary);
+    font: inherit;
+    cursor: pointer;
+    min-height: 44px;
+    white-space: nowrap;
+    &.active {
+      background: var(--lumo-primary);
+      color: var(--lumo-text-on-primary);
+    }
+  }
+
+  // Long, multi-option groups need a horizontal scroll fallback
+  // on narrow screens rather than wrapping inside the pill.
+  &--scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+}
+
+.laji-tagbox {
+  flex: 1 1 280px;
+  min-width: 220px;
+  max-width: 520px;
+}
+
+.filter-grid {
+  flex: 1 1 100%;
+  display: grid;
+  gap: var(--lumo-space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+
+  dx-tag-box {
+    min-width: 0;
+  }
+}
+
+.range-grid {
+  flex: 1 1 100%;
+  display: grid;
+  gap: var(--lumo-space-md) var(--lumo-space-lg);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.range-pair {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--lumo-space-sm);
+
+  dx-number-box,
+  dx-date-box {
+    min-width: 0;
+  }
+
+  .range-label {
+    font-size: var(--lumo-fs-caption);
+    color: var(--lumo-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+
+  .range-sep {
+    color: var(--lumo-text-tertiary);
+    text-align: center;
+  }
+}
+
+.sort {
+  background: var(--lumo-surface-elevated);
+  color: var(--lumo-text-primary);
+  border: 1px solid var(--lumo-border);
+  border-radius: var(--lumo-radius-md);
+  padding: var(--lumo-space-sm) var(--lumo-space-md);
+  font: inherit;
+  min-height: 44px;
+}
+
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--lumo-space-md);
+
+  @media (min-width: 600px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  @media (min-width: 960px) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-sm);
+  padding: var(--lumo-space-lg);
+  padding-left: calc(var(--lumo-space-lg) + 6px); // breathing room for the stripe
+  border-radius: var(--lumo-radius-xl);
+  background: var(--lumo-surface-elevated);
+  border: 1px solid var(--lumo-border);
+  border-left: 6px solid var(--card-stripe-color, var(--lumo-border));
+  box-shadow: var(--lumo-shadow-sm);
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow var(--lumo-duration-fast) var(--lumo-easing),
+              border-color var(--lumo-duration-fast) var(--lumo-easing);
+
+  &:hover {
+    box-shadow: var(--lumo-shadow-md);
+  }
+
+  // Vapautuu-päivä → vasen reunaviiva
+  &--vapautuu-past {   --card-stripe-color: var(--lumo-danger,  #d32f2f); }
+  &--vapautuu-soon {   --card-stripe-color: var(--lumo-warning, #ef6c00); }
+  &--vapautuu-near {   --card-stripe-color: #f9a825; }                       // amber
+  &--vapautuu-future { --card-stripe-color: var(--lumo-success, #2e7d32); }
+  &--vapautuu-none {   --card-stripe-color: var(--lumo-border-strong, #cbd5e1); }
+
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--lumo-space-sm);
+    align-items: baseline;
+  }
+
+  .osoite {
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: var(--lumo-fs-h3);
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .distance {
+    font-size: var(--lumo-fs-small);
+    color: var(--lumo-text-tertiary);
+    flex: 0 0 auto;
+  }
+
+  .card-meta {
+    display: flex;
+    gap: var(--lumo-space-md);
+    color: var(--lumo-text-secondary);
+    font-size: var(--lumo-fs-small);
+    flex-wrap: wrap;
+
+    &--sub {
+      gap: var(--lumo-space-sm);
+      color: var(--lumo-text-tertiary);
+      font-size: var(--lumo-fs-caption);
+    }
+  }
+
+  .card-id {
+    display: inline-flex;
+    gap: 2px;
+    align-self: flex-start;
+    font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", monospace;
+    font-size: var(--lumo-fs-caption);
+    color: var(--lumo-text-tertiary);
+    background: var(--lumo-surface);
+    padding: 2px var(--lumo-space-xs);
+    border-radius: var(--lumo-radius-sm);
+
+    .card-id-sep {
+      opacity: 0.6;
+    }
+  }
+
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--lumo-space-sm);
+    flex-wrap: wrap;
+  }
+
+  .vuokra {
+    font-weight: var(--lumo-fw-medium);
+    font-size: var(--lumo-fs-h3);
+    color: var(--lumo-text-primary);
+  }
+
+  .vapautuu {
+    font-size: var(--lumo-fs-caption);
+    color: var(--lumo-text-tertiary);
+  }
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lumo-space-xs);
+}
+
+.badge {
+  font-size: var(--lumo-fs-caption);
+  font-weight: var(--lumo-fw-medium);
+  padding: 2px var(--lumo-space-sm);
+  border-radius: var(--lumo-radius-full);
+  background: var(--lumo-surface);
+  color: var(--lumo-text-secondary);
+  border: 1px solid var(--lumo-border);
+
+  &--lumo {
+    background: var(--lumo-primary-subtle);
+    color: var(--lumo-primary);
+    border-color: transparent;
+  }
+  &--warn {
+    background: var(--lumo-warning-subtle);
+    color: var(--lumo-warning);
+    border-color: transparent;
+  }
+  &--prio {
+    background: var(--lumo-info-subtle, var(--lumo-surface));
+    color: var(--lumo-info, var(--lumo-text-secondary));
+    border-color: transparent;
+    font-weight: var(--lumo-fw-medium);
+  }
+
+  // Tila — pastel "haalea" colour map mirroring XAF Tila set
+  &--tila {
+    border-color: transparent;
+    font-weight: var(--lumo-fw-medium);
+  }
+  &--tila-vapaa     { background: #d6f5dc; color: #1f5132; }   // green
+  &--tila-tarjottu  { background: #d8e6ff; color: #1d3a73; }   // blue
+  &--tila-esittely  { background: #ece1ff; color: #4527a0; }   // purple
+  &--tila-remontti  { background: #ffe5cc; color: #8b3a00; }   // orange
+  &--tila-varattu   { background: #ffd8d8; color: #8b1a1a; }   // red
+  &--tila-irtisan   { background: #fff3c4; color: #6b4d00; }   // yellow
+  &--tila-default   { background: var(--lumo-surface); color: var(--lumo-text-secondary); }
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lumo-space-md);
+  font-size: var(--lumo-fs-small);
+  color: var(--lumo-text-secondary);
+
+  button {
+    background: transparent;
+    border: 1px solid var(--lumo-border-strong);
+    border-radius: var(--lumo-radius-md);
+    padding: var(--lumo-space-sm) var(--lumo-space-md);
+    color: var(--lumo-text-primary);
+    cursor: pointer;
+    min-height: 40px;
+
+    &:hover:not(:disabled) { background: var(--lumo-surface); }
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+  }
+}
+
+.status, .error {
+  text-align: center;
+  padding: var(--lumo-space-2xl) var(--lumo-space-lg);
+}
+.status { color: var(--lumo-text-secondary); }
+.error { color: var(--lumo-danger); }

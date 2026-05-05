@@ -408,6 +408,249 @@
   }
 }
 
+// Asiakkaat tab — dx-list flat, alphabetical, mixed-type customers
+// (Henkilo · Yritys · Yhteyshenkilo). Each row carries an avatar tinted
+// by type, a primary line + secondary detail, optional tag, and one
+// count pill per non-zero relation (contracts / offers / applications /
+// showings / reservations).
+//
+// Spec: design/handoff_navigation/v5/.../SCREENS.md §02 + Lumo domain.
+.lumo-customers-list.dx-list {
+  background: transparent;
+  border: 0;
+  padding: 0;
+
+  .dx-empty-message { display: none; }
+
+  .dx-list-item {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--lumo-surface);
+    padding: 0;
+    cursor: pointer;
+
+    &.dx-state-hover, &.dx-state-focused {
+      background: var(--lumo-primary-subtle);
+    }
+
+    .dx-list-item-content { padding: 0; }
+  }
+
+  .customer-row {
+    display: flex;
+    align-items: center;
+    gap: var(--lumo-space-md);
+    padding: 12px var(--lumo-space-lg);
+    min-height: 64px;
+  }
+
+  .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--lumo-radius-full);
+    background: var(--lumo-primary-subtle);
+    color: var(--lumo-primary);
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+
+    // Per-type tints differentiate Henkilo / Yritys / Yhteyshenkilo at a glance.
+    &[data-type='person']         { background: var(--lumo-primary-subtle); color: var(--lumo-primary); }
+    &[data-type='company']        { background: var(--lumo-info-subtle);    color: var(--lumo-info); }
+    &[data-type='contact-person'] { background: var(--lumo-cream);          color: var(--lumo-warning); }
+  }
+
+  .customer-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .customer-name {
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: var(--lumo-fs-small);
+    color: var(--lumo-text-primary);
+
+    mark {
+      background: var(--lumo-cta-subtle);
+      color: var(--lumo-cta);
+      padding: 0 2px;
+      border-radius: var(--lumo-radius-sm);
+    }
+  }
+
+  .customer-secondary {
+    font-family: var(--lumo-font-body);
+    font-size: 12px;
+    color: var(--lumo-text-secondary);
+
+    mark {
+      background: var(--lumo-cta-subtle);
+      color: var(--lumo-cta);
+      padding: 0 2px;
+      border-radius: var(--lumo-radius-sm);
+    }
+  }
+
+  .customer-tag {
+    align-self: flex-start;
+    margin-top: 2px;
+    padding: 3px 8px;
+    border-radius: var(--lumo-radius-full);
+    background: var(--lumo-surface);
+    color: var(--lumo-text-secondary);
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: 10px;
+    line-height: 1.4;
+    white-space: nowrap;
+
+    &[data-tone='cta']  { background: var(--lumo-cta-subtle);     color: var(--lumo-cta); }
+    &[data-tone='info'] { background: var(--lumo-info-subtle);    color: var(--lumo-info); }
+    &[data-tone='warn'] { background: var(--lumo-warning-subtle); color: var(--lumo-warning); }
+  }
+
+  .customer-counts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    max-width: 50%;
+  }
+
+  .count-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: var(--lumo-radius-full);
+    background: var(--lumo-primary-subtle);
+    color: var(--lumo-primary);
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-semibold);
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: nowrap;
+
+    i { font-size: 12px; }
+
+    &[data-tone='cta']  { background: var(--lumo-cta-subtle);     color: var(--lumo-cta); }
+    &[data-tone='info'] { background: var(--lumo-info-subtle);    color: var(--lumo-info); }
+    &[data-tone='warn'] { background: var(--lumo-warning-subtle); color: var(--lumo-warning); }
+  }
+
+  .count-empty {
+    color: var(--lumo-text-tertiary);
+    font-family: var(--lumo-font-body);
+    font-size: 12px;
+  }
+
+  .customer-chev {
+    color: var(--lumo-text-tertiary);
+    font-size: 16px;
+    flex: 0 0 auto;
+  }
+}
+
+
+// Quick search — dx-list grouped, hit rows with mark() highlight.
+// Spec: design/handoff_navigation/v5/.../SCREENS.md §05, BEHAVIOR.md §6.
+.lumo-search-list.dx-list {
+  background: transparent;
+  border: 0;
+  padding: 0 0 var(--lumo-space-2xl);
+
+  .dx-empty-message { display: none; }
+
+  .dx-list-group {
+    border: 0;
+    background: transparent;
+  }
+
+  .dx-list-group-header {
+    background: var(--lumo-bg);
+    border: 0;
+    padding: 0;
+  }
+
+  .dx-list-group-body {
+    padding: 0;
+    background: transparent;
+  }
+
+  .dx-list-item {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+
+    &.dx-state-hover, &.dx-state-focused {
+      background: var(--lumo-primary-subtle);
+    }
+
+    .dx-list-item-content { padding: 0; }
+  }
+
+  .qs-row {
+    display: flex;
+    align-items: center;
+    gap: var(--lumo-space-md);
+    padding: 10px var(--lumo-space-lg);
+    min-height: 56px;
+    border-bottom: 1px solid var(--lumo-surface);
+  }
+
+  .qs-icon {
+    color: var(--lumo-text-secondary);
+    font-size: 18px;
+    flex: 0 0 auto;
+  }
+
+  .qs-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .qs-title {
+    font-family: var(--lumo-font-body);
+    font-weight: var(--lumo-fw-medium);
+    font-size: var(--lumo-fs-small);
+    color: var(--lumo-text-primary);
+
+    mark {
+      background: var(--lumo-cta-subtle);
+      color: var(--lumo-cta);
+      padding: 0 2px;
+      border-radius: var(--lumo-radius-sm);
+    }
+  }
+
+  .qs-meta {
+    font-family: var(--lumo-font-body);
+    font-size: 12px;
+    color: var(--lumo-text-secondary);
+
+    mark {
+      background: var(--lumo-cta-subtle);
+      color: var(--lumo-cta);
+      padding: 0 2px;
+      border-radius: var(--lumo-radius-sm);
+    }
+  }
+}
+
+
 // More tab — XAF module groups (ASMA / KIRE) + app settings list-groups.
 // Spec: design/handoff_navigation/v5/.../SCREENS.md §03, NAVIGATION.md §4b.
 //

@@ -29,6 +29,12 @@ export const routes: Routes = [
       import('./features/auth-callback/auth-callback.component').then(m => m.AuthCallbackComponent),
   },
   {
+    path: 'search',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/search/quick-search.component').then(m => m.QuickSearchComponent),
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () =>
@@ -44,6 +50,23 @@ export const routes: Routes = [
         path: 'tasks/:id',
         loadComponent: () =>
           import('./features/tasks/task-detail.component').then(m => m.TaskDetailComponent),
+      },
+      {
+        path: 'tiskilista',
+        data: { reuse: true },
+        loadComponent: () =>
+          import('./features/tiskilista/tiskilista-list.component').then(m => m.TiskilistaListComponent),
+      },
+      {
+        path: 'tiskilista/:id',
+        loadComponent: () =>
+          import('./features/tiskilista/tiskilista-detail.component').then(m => m.TiskilistaDetailComponent),
+      },
+      {
+        path: 'customers',
+        data: { reuse: true },
+        loadComponent: () =>
+          import('./features/customers/customers.component').then(m => m.CustomersComponent),
       },
       {
         path: 'home-hub',

@@ -1,0 +1,98 @@
+// dx-list internal templates (.qs-section, .qs-row, .qs-icon, etc.) live
+// in design/lumo-devextreme-overrides.scss because they render inside
+// *dxTemplate, which bypasses Angular's emulated CSS encapsulation.
+// Page-level layout (search bar, recent block) lives here.
+
+:host {
+  display: block;
+  background: var(--lumo-bg);
+  color: var(--lumo-text-primary);
+  min-height: 100dvh;
+  animation: search-enter var(--lumo-duration-slow) var(--lumo-easing) both;
+}
+
+@keyframes search-enter {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :host { animation-duration: 0.01ms; }
+}
+
+.search {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  max-width: 720px;
+  margin: 0 auto;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-sm);
+  padding: 12px var(--lumo-space-lg);
+  border-bottom: 1px solid var(--lumo-border);
+  position: sticky;
+  top: 0;
+  z-index: var(--lumo-z-sticky);
+  background: var(--lumo-bg);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.cancel { flex: 0 0 auto; }
+
+.recent {
+  padding: var(--lumo-space-md) var(--lumo-space-lg);
+}
+
+.qs-section {
+  font-family: var(--lumo-font-body);
+  font-weight: var(--lumo-fw-medium);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lumo-text-tertiary);
+  padding: 14px var(--lumo-space-lg) 6px;
+  margin: 0;
+}
+
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.recent-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-md);
+  width: 100%;
+  padding: 10px 0;
+  background: transparent;
+  border: 0;
+  font-family: var(--lumo-font-body);
+  font-size: var(--lumo-fs-body);
+  color: var(--lumo-text-primary);
+  cursor: pointer;
+  text-align: left;
+
+  i { color: var(--lumo-text-tertiary); font-size: 18px; }
+
+  &:hover { color: var(--lumo-primary); }
+}
+
+.hint {
+  text-align: center;
+  padding: var(--lumo-space-2xl) var(--lumo-space-lg);
+  font-family: var(--lumo-font-body);
+  color: var(--lumo-text-secondary);
+}

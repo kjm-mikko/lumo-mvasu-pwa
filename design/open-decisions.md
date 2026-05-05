@@ -308,6 +308,45 @@ Toteutus:
 
 ---
 
+## OD-011 · SopimusVaraus signature-pending -filtteröinti (Sopimustila-tunnukset)
+
+**Status:** Avoin
+**Päätetty:** 2026-05-04
+**Päättäjä:** A4-vaihe (TaskQueryService)
+
+### Konteksti
+
+A4-vaiheessa lisättiin `SopimusVaraus`-entiteetti `signature-pending`-tehtävälähteeksi. BACKEND.md §2.3 sanoo että rivi on jonossa kun `Status = 'hyvaksytty_asiakkaalla' AND AllekirjoitusPaiva IS NULL`. Käytännössä:
+
+- Runtime-kentässä `Sopimustila` on FK lookup-tauluun `t_Sopimustila` (`SopimusTilaTunnus` Int32 + `SopimusTilaNimi` String)
+- Emme tiedä nyt mitkä tunnukset tarkoittavat "hyväksytty asiakkaalla / odottaa allekirjoitusta"
+- `AllekirjoitusPaiva`-kenttää ei ole SopimusVaraus-luokassa lainkaan
+
+### Nykyinen ratkaisu
+
+- **Ei status-filteriä** — kaikki SopimusVaraus-rivit, jotka käyttäjä näkee BranchCoden kautta, päätyvät listalle
+- Kompensaationa: lookback **1000 päivään** ja **cap 50 riviin** (`Kirjattu DESC`)
+- Kortin meta-rivillä näytetään `SopimusTilaNimi` jotta käyttäjä erottaa tilat visuaalisesti
+
+### Trigger uudelleenarviointiin
+
+1. Kun saadaan lista mitkä `SopimusTilaTunnus`-arvot tarkoittavat "odottaa allekirjoitusta" → lisätään `BinaryOperator("Sopimustila.SopimusTilaTunnus", x, Equal)` -kriteeri ja palautetaan lookback ~30-90 päivään
+2. Tai jos tarjous-prosessissa on selkeä Boolean-flag (esim. `Vahvistus = true AND Sopimus is null`), käytetään sitä
+
+### Tehtävälista A4
+
+- [ ] Selvittää SopimusTilaTunnus-arvojen merkitykset Lumon mVasu DB:stä
+- [ ] Päätä mitkä tilat = "kuuluu signature-pending listaan" (ainakin: vahvistettu mutta sopimusta ei vielä kirjattu)
+- [ ] Lisää status-filteri ja kavenna `OfferLookbackDays` 1000 → ~90 (`src/mVasu.Api/Tasks/TaskQueryService.cs`)
+- [ ] Harkitse erillisen Sopimus-lähteen lisäämistä (BACKEND.md §2.4) jos sopimusvaiheen allekirjoitukset ovat eri taulussa kuin SopimusVaraus-vaihe
+- [ ] **Smoke-testi paljasti**: SopimusVaraus-collectionin materialisointi heittää `CannotLoadObjectsException` koska DB:ssä on rikkinäisiä FK-viittauksia (`HakemusAsumisAika(0)`, `AsiakasLuottokysely2(591714)`). Lievennetty `SafelyAdd`-try-catchilla — yksittäisen lähteen kaatuminen ei kaada koko endpointtia, mutta SopimusVaraus näyttää 0 rivin nyt. Pysyvä korjaus: joko XPO-stub/lazy-loading -optio (`UseDelayedFetch`/`LoadingEnabled = false`), siirtyminen `XPQuery<T>`-projektointiin (vain tarvittavat sarakkeet), tai DB-tason siivous
+
+### Linkitys koodiin
+
+[`src/mVasu.Api/Tasks/TaskQueryService.cs`](../src/mVasu.Api/Tasks/TaskQueryService.cs) — etsi `OfferLookbackDays` ja `BuildOfferCriteria`.
+
+---
+
 ## Päätösten lisäysohje
 
 Uusia päätöksiä lisätään seuraavalla sapluunalla:
