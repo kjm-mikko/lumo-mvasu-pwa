@@ -68,6 +68,78 @@
 
 .search-input { width: 100%; }
 
+.search-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-xs);
+  margin-top: var(--lumo-space-xs);
+  font-size: var(--lumo-font-sm);
+  color: var(--lumo-text-secondary);
+
+  .dx-icon {
+    animation: lumo-spin 1.4s linear infinite;
+  }
+}
+
+@keyframes lumo-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+// Skeleton-rivit: kevyt placeholder ennen ensimmäistä vastausta. Käytetään vain
+// kun listassa ei ole vielä mitään näkyvissä; muutoin lähetetty hakutila
+// merkitään pelkällä .search-loading -indikaattorilla yllä.
+.skeleton-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--lumo-space-sm) var(--lumo-space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-xs);
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-md);
+  padding: var(--lumo-space-md) 0;
+  border-bottom: 1px solid var(--lumo-border);
+
+  &:last-child { border-bottom: none; }
+}
+
+.skeleton-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--lumo-surface);
+  animation: lumo-shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 6px;
+}
+
+.skeleton-line {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--lumo-surface);
+  animation: lumo-shimmer 1.6s ease-in-out infinite;
+
+  &--name { width: 45%; }
+  &--sub  { width: 70%; height: 10px; }
+}
+
+@keyframes lumo-shimmer {
+  0%   { opacity: 0.55; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.55; }
+}
+
 .chip-row {
   display: flex;
   flex-wrap: wrap;

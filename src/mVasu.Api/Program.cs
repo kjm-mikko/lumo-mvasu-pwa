@@ -59,7 +59,7 @@ builder.Services.AddScoped<IUserResolver, XpoEmailUserResolver>();
 builder.Services.AddScoped<IUserSettingsService, XpoUserSettingsService>();
 builder.Services.AddScoped<ITiskilistaQueryService, TiskilistaQueryService>();
 builder.Services.AddScoped<ITaskQueryService, TaskQueryService>();
-builder.Services.AddScoped<ICustomerQueryService, CustomerQueryService>();
+builder.Services.AddScoped<ICustomerQueryService, XpoCustomerQueryService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 
 builder.Services.AddVasuXpo(builder.Configuration);
@@ -489,9 +489,9 @@ app.MapGet("/api/customers", async (
     })
     .WithName("GetCustomers")
     .WithSummary("Lists Asiakkaat (Henkilö / Yritys / Yhteyshenkilö) sorted fi-FI " +
-                 "by displayName. Phase 1 returns a mock fixture; Phase 2 projects " +
-                 "from xVasu.Data.Asma.Henkilo / Yritys / Yhteyshenkilo with related-" +
-                 "entity counts (Hakemus, SopimusVaraus, Sopimus, Tarjous, Esittely).")
+                 "by displayName. Projects from xVasu.Data.Asma.Asiakas with related-" +
+                 "entity counts (Hakemus, SopimusVaraus, Sopimus, Tutustumiskäynti). " +
+                 "Visibility scopes via XPO PermissionPolicy on the user's session.")
     .RequireAuthorization(AccessAsUserPolicy);
 
 app.MapGet("/api/search", async (

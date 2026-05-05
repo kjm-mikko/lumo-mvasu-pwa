@@ -4,10 +4,12 @@ using mVasu.Api.Contracts;
 namespace mVasu.Api.Customers;
 
 /// <summary>
-/// Asiakkaat browser. Phase 1 returns a hand-curated mock; Phase 2 will
-/// project from <c>xVasu.Data.Asma.Henkilo</c> / <c>Yritys</c> /
-/// <c>Yhteyshenkilo</c> with related-entity counts (Hakemus,
-/// SopimusVaraus, Sopimus, Tarjous, Esittely / Tutustumiskaynti).
+/// Asiakkaat browser. Projects from <c>xVasu.Data.Asma.Asiakas</c> (and
+/// its concrete subtypes <c>Henkilo</c> / <c>Yritys</c> /
+/// <c>Yhteyshenkilo</c>) with related-entity counts aggregated from
+/// Hakemus, SopimusVaraus, Sopimus and DirectRentalCustomerInspection.
+/// Row-level visibility comes from the XPO PermissionPolicy of the
+/// authenticated user's session.
 /// </summary>
 public interface ICustomerQueryService
 {
