@@ -153,6 +153,8 @@ public sealed class TiskilistaQueryService(
     public Task<TiskilistaDetailDto?> GetAsync(
         ClaimsPrincipal principal,
         Guid id,
+        double? userLat = null,
+        double? userLon = null,
         CancellationToken cancellationToken = default)
     {
         var (user, os) = ResolveUser(principal);
@@ -178,10 +180,13 @@ public sealed class TiskilistaQueryService(
 
             var session = ((XPObjectSpace)os).Session;
             var upcoming = LookupUpcomingShowings(session, CollectHuoneistoOids(new[] { row }));
+            var distanceKm = userLat.HasValue && userLon.HasValue
+                ? ComputeDistanceKm(userLat.Value, userLon.Value, row.Latitude, row.Longitude)
+                : null;
 
             try
             {
-                return Task.FromResult<TiskilistaDetailDto?>(MapDetail(row, upcoming));
+                return Task.FromResult<TiskilistaDetailDto?>(MapDetail(row, upcoming, distanceKm));
             }
             catch (Exception ex)
             {
@@ -192,7 +197,7 @@ public sealed class TiskilistaQueryService(
                 logger.LogWarning(ex, "Tiskilista {Id} full-detail mapping failed; falling back to minimal", id);
                 try
                 {
-                    return Task.FromResult<TiskilistaDetailDto?>(MapDetailMinimal(row, upcoming));
+                    return Task.FromResult<TiskilistaDetailDto?>(MapDetailMinimal(row, upcoming, distanceKm));
                 }
                 catch (Exception minimalEx)
                 {
@@ -486,9 +491,11 @@ public sealed class TiskilistaQueryService(
         string.IsNullOrWhiteSpace(value) ? null : value;
 
     private static TiskilistaDetailDto MapDetail(
-        XpoTiskilista t, IDictionary<Guid, DateTime> upcoming) => new(
+        XpoTiskilista t, IDictionary<Guid, DateTime> upcoming, double? distanceKm) => new(
         Id: t.OID,
         Osoite: t.katuosoite ?? string.Empty,
+        Kptunnus: t.kptunnus == 0 ? null : t.kptunnus,
+        Huonetunnus: t.huonetunnus == 0 ? null : t.huonetunnus,
         Postinumero: t.Postinumero,
         Postitoimipaikka: t.Postitoimipaikka,
         Tyyppi: t.tyyppi,
@@ -532,6 +539,7 @@ public sealed class TiskilistaQueryService(
         NextEsittelyAt: NextEsittelyFor(t, upcoming),
         Latitude: t.Latitude == 0 ? null : t.Latitude,
         Longitude: t.Longitude == 0 ? null : t.Longitude,
+        DistanceKm: distanceKm,
         LumoUrl: t.Huoneisto?.LumoUrl);
 
     private static string? ResolveTarkastusTila(XpoTiskilista t)
@@ -557,9 +565,11 @@ public sealed class TiskilistaQueryService(
     /// rather than a hard 500.
     /// </summary>
     private static TiskilistaDetailDto MapDetailMinimal(
-        XpoTiskilista t, IDictionary<Guid, DateTime> upcoming) => new(
+        XpoTiskilista t, IDictionary<Guid, DateTime> upcoming, double? distanceKm) => new(
         Id: t.OID,
         Osoite: t.katuosoite ?? string.Empty,
+        Kptunnus: t.kptunnus == 0 ? null : t.kptunnus,
+        Huonetunnus: t.huonetunnus == 0 ? null : t.huonetunnus,
         Postinumero: t.Postinumero,
         Postitoimipaikka: t.Postitoimipaikka,
         Tyyppi: t.tyyppi,
@@ -602,5 +612,6 @@ public sealed class TiskilistaQueryService(
         NextEsittelyAt: NextEsittelyFor(t, upcoming),
         Latitude: t.Latitude == 0 ? null : t.Latitude,
         Longitude: t.Longitude == 0 ? null : t.Longitude,
+        DistanceKm: distanceKm,
         LumoUrl: null);                              // Huoneisto-traversal
 }

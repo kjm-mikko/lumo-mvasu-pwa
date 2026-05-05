@@ -689,6 +689,9 @@ export class TiskilistaListComponent {
 
   constructor() {
     // Reset page to 1 whenever any non-pagination filter changes.
+    // Do NOT read pageNumber inside this effect — that would make it a
+    // dependency, so calling goPage(2) would re-fire the effect and reset
+    // back to 1, breaking pagination. Always-set is a no-op when already 1.
     effect(() => {
       this.searchInput();
       this.scope();
@@ -708,8 +711,7 @@ export class TiskilistaListComponent {
       this.lumoFiOnly();
       this.hasUpcomingEsittelyOnly();
       this.sortBy();
-      // Skip on the initial run; rely on the query effect to load page 1.
-      if (this.pageNumber() !== 1) this.pageNumber.set(1);
+      this.pageNumber.set(1);
     }, { allowSignalWrites: true });
 
     // Fetch distinct values once on init for the filter dropdowns.

@@ -1,6 +1,8 @@
 export interface TiskilistaDetailDto {
   readonly id: string;
   readonly osoite: string;
+  readonly kptunnus: number | null;
+  readonly huonetunnus: number | null;
   readonly postinumero: string | null;
   readonly postitoimipaikka: string | null;
   readonly tyyppi: string | null;
@@ -43,5 +45,6 @@ export interface TiskilistaDetailDto {
   readonly nextEsittelyAt: string | null;
   readonly latitude: number | null;
   readonly longitude: number | null;
+  readonly distanceKm: number | null;
   readonly lumoUrl: string | null;
 }

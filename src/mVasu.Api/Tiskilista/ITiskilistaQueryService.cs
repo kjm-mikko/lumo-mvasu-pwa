@@ -13,6 +13,8 @@ public interface ITiskilistaQueryService
     Task<TiskilistaDetailDto?> GetAsync(
         ClaimsPrincipal principal,
         Guid id,
+        double? userLat = null,
+        double? userLon = null,
         CancellationToken cancellationToken = default);
 
     Task<TiskilistaDistinctValuesDto?> GetDistinctValuesAsync(

@@ -378,15 +378,18 @@ app.MapGet("/api/tiskilista/{id:guid}", async (
         Guid id,
         ClaimsPrincipal user,
         ITiskilistaQueryService service,
+        double? userLat,
+        double? userLon,
         CancellationToken ct) =>
     {
-        var detail = await service.GetAsync(user, id, ct);
+        var detail = await service.GetAsync(user, id, userLat, userLon, ct);
         return detail is null
             ? Results.NotFound()
             : Results.Ok(detail);
     })
     .WithName("GetTiskilistaById")
-    .WithSummary("Returns the full Tiskilista detail by Oid.")
+    .WithSummary("Returns the full Tiskilista detail by Oid. " +
+                 "Optional userLat/userLon enable distance computation matching the list view.")
     .RequireAuthorization(AccessAsUserPolicy);
 
 app.MapGet("/api/tasks", async (

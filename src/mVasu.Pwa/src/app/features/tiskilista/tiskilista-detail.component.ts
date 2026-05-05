@@ -14,6 +14,7 @@ import { catchError, of, switchMap } from 'rxjs';
 import { DxToastModule } from 'devextreme-angular/ui/toast';
 
 import { TiskilistaApiService } from '../../core/services/tiskilista-api.service';
+import { LocationService } from '../../core/services/location.service';
 import type { TiskilistaDetailDto } from '../../core/models/tiskilista-detail.dto';
 
 type ToastType = 'info' | 'success' | 'warning' | 'error';
@@ -45,6 +46,13 @@ const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
             @if (t.kaupunginosa) { <span>· {{ t.kaupunginosa }}</span> }
             @if (t.kunta) { <span>· {{ t.kunta }}</span> }
           </p>
+          @if (t.kptunnus || t.huonetunnus) {
+            <p class="header-id">
+              @if (t.kptunnus) { <span>{{ t.kptunnus }}</span> }
+              @if (t.kptunnus && t.huonetunnus) { <span class="id-sep">/</span> }
+              @if (t.huonetunnus) { <span>{{ t.huonetunnus }}</span> }
+            </p>
+          }
         </header>
 
         @if (t.nextEsittelyAt) {
@@ -75,6 +83,12 @@ const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
               {{ t.kerros || '—' }}{{ t.kerroksia ? '/' + t.kerroksia : '' }}
             </span>
           </div>
+          @if (t.distanceKm !== null) {
+            <div class="hero-cell">
+              <span class="label">Etäisyys</span>
+              <span class="value">{{ t.distanceKm | number:'1.0-1' }} km</span>
+            </div>
+          }
         </section>
 
         <section class="actions">
@@ -94,35 +108,17 @@ const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
             <div><dt>Laji</dt><dd>{{ t.laji || '—' }}</dd></div>
             <div><dt>Vapautuu</dt><dd>{{ t.vapautuu ? (t.vapautuu | date:'dd.MM.yyyy') : '—' }}</dd></div>
             <div><dt>Poismuutto</dt><dd>{{ t.poismuutto ? (t.poismuutto | date:'dd.MM.yyyy') : '—' }}</dd></div>
-            @if (t.vapautuuAsiakkaalta) {
-              <div><dt>Vapautuu asiakkaalta</dt><dd>{{ t.vapautuuAsiakkaalta | date:'dd.MM.yyyy' }}</dd></div>
-            }
-            @if (t.remonttiAlkaa || t.remonttiPaattyy) {
-              <div><dt>Remontti</dt>
-                <dd>
-                  @if (t.remonttiAlkaa) { {{ t.remonttiAlkaa | date:'dd.MM.yyyy' }} } @else { ? }
-                  –
-                  @if (t.remonttiPaattyy) { {{ t.remonttiPaattyy | date:'dd.MM.yyyy' }} } @else { ? }
-                </dd>
-              </div>
-            }
-            @if (t.remonttityyppi) {
-              <div><dt>Remonttityyppi</dt><dd>{{ t.remonttityyppi }}</dd></div>
-            }
-            @if (t.tarkastusTila) {
-              <div><dt>Tarkastuksen tila</dt><dd>{{ t.tarkastusTila }}</dd></div>
-            }
+            <div><dt>Etäisyys</dt><dd>{{ t.distanceKm !== null ? (t.distanceKm | number:'1.0-1') + ' km' : '—' }}</dd></div>
+            <div><dt>Vapautuu asiakkaalta</dt><dd>{{ t.vapautuuAsiakkaalta ? (t.vapautuuAsiakkaalta | date:'dd.MM.yyyy') : '—' }}</dd></div>
+            <div><dt>Remontin alkamispäivä</dt><dd>{{ t.remonttiAlkaa ? (t.remonttiAlkaa | date:'dd.MM.yyyy') : '—' }}</dd></div>
+            <div><dt>Remontin päättymispäivä</dt><dd>{{ t.remonttiPaattyy ? (t.remonttiPaattyy | date:'dd.MM.yyyy') : '—' }}</dd></div>
+            <div><dt>Remonttityyppi</dt><dd>{{ t.remonttityyppi || '—' }}</dd></div>
+            <div><dt>Tarkastuksen tila</dt><dd>{{ t.tarkastusTila || '—' }}</dd></div>
             <div><dt>Aluetoimisto</dt><dd>{{ t.aluetoimisto || '—' }}</dd></div>
             <div><dt>Markkinointialue</dt><dd>{{ t.markkinointialue || '—' }}</dd></div>
-            @if (t.isannoitsija) {
-              <div><dt>Isännöitsijä</dt><dd>{{ t.isannoitsija }}</dd></div>
-            }
-            @if (t.markkinoija) {
-              <div><dt>Markkinoija</dt><dd>{{ t.markkinoija }}</dd></div>
-            }
-            @if (t.prio) {
-              <div><dt>Prio</dt><dd>{{ t.prio }}</dd></div>
-            }
+            <div><dt>Isännöitsijä</dt><dd>{{ t.isannoitsija || '—' }}</dd></div>
+            <div><dt>Markkinoija</dt><dd>{{ t.markkinoija || '—' }}</dd></div>
+            <div><dt>Prio</dt><dd>{{ t.prio || '—' }}</dd></div>
           </dl>
         </section>
 
@@ -244,6 +240,7 @@ const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
 })
 export class TiskilistaDetailComponent {
   private readonly api = inject(TiskilistaApiService);
+  private readonly location = inject(LocationService);
   private readonly destroyRef = inject(DestroyRef);
 
   /** Bound from the route parameter via withComponentInputBinding. */
@@ -259,13 +256,24 @@ export class TiskilistaDetailComponent {
   });
 
   constructor() {
+    // Eagerly request a location fix so distance shows up even when the
+    // user lands on detail directly (URL refresh, share link). Same
+    // permission-state guard as the list component.
+    const state = this.location.permissionState();
+    if (state !== 'denied'
+      && state !== 'unsupported'
+      && this.location.currentPosition() === null) {
+      this.location.getCurrent().catch(() => undefined);
+    }
+
     toObservable(this.id)
       .pipe(
         switchMap((id) => {
           this.loading.set(true);
           this.loadError.set(false);
           this.item.set(null);
-          return this.api.get(id).pipe(
+          const pos = this.location.currentPosition();
+          return this.api.get(id, pos?.coords.latitude ?? null, pos?.coords.longitude ?? null).pipe(
             catchError((err) => {
               console.error('[Tiskilista] detail load failed', err);
               this.loadError.set(true);
