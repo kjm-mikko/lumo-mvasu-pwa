@@ -37,6 +37,11 @@ import {
 type MultiSelectKey = 'lajit' | 'tyypit' | 'kunnat' | 'kaupunginosat' | 'sopimustilat' | 'isannoitsijat' | 'markkinoijat';
 type BoolFilterKey = 'onKuvausTarveOnly' | 'lumoFiOnly' | 'hasUpcomingEsittelyOnly';
 
+interface ActiveFilterChip {
+  readonly label: string;
+  readonly clear: () => void;
+}
+
 type ToastType = 'info' | 'success' | 'warning' | 'error';
 interface ToastState {
   readonly visible: boolean;
@@ -311,6 +316,25 @@ function toIsoDate(d: Date | null): string | null {
           }
         </select>
       </section>
+
+      @if (activeFilters().length > 0) {
+        <section class="active-filters" role="status" aria-label="Aktiiviset suodattimet">
+          @for (chip of activeFilters(); track chip.label) {
+            <button
+              type="button"
+              class="active-chip"
+              (click)="chip.clear()"
+              [attr.aria-label]="'Poista suodatin: ' + chip.label"
+            >
+              <span>{{ chip.label }}</span>
+              <span class="chip-x" aria-hidden="true">×</span>
+            </button>
+          }
+          <button type="button" class="clear-all" (click)="clearAllFilters()">
+            Tyhjennä kaikki
+          </button>
+        </section>
+      }
 
       @if (loading()) {
         <p class="status">Ladataan…</p>
@@ -764,6 +788,104 @@ export class TiskilistaListComponent {
     if (page < 1) return;
     if (page > this.totalPages()) return;
     this.pageNumber.set(page);
+  }
+
+  // -- Active-filter chip row -----------------------------------------------
+
+  protected readonly activeFilters = computed<ReadonlyArray<ActiveFilterChip>>(() => {
+    const chips: ActiveFilterChip[] = [];
+
+    const q = this.searchInput().trim();
+    if (q) {
+      chips.push({ label: `Hae: "${q}"`, clear: () => this.searchInput.set('') });
+    }
+
+    if (this.status() !== null) {
+      const v = this.status()!;
+      chips.push({ label: `Tila: ${v}`, clear: () => this.status.set(null) });
+    }
+
+    this.multiSelectChip(chips, 'lajit', 'Laji');
+    this.multiSelectChip(chips, 'tyypit', 'Tyyppi');
+    this.multiSelectChip(chips, 'kunnat', 'Kunta');
+    this.multiSelectChip(chips, 'kaupunginosat', 'Kaupunginosa');
+    this.multiSelectChip(chips, 'sopimustilat', 'Sopimustila');
+    this.multiSelectChip(chips, 'isannoitsijat', 'Isännöitsijä');
+    this.multiSelectChip(chips, 'markkinoijat', 'Markkinoija');
+
+    const min = this.neliotMin();
+    const max = this.neliotMax();
+    if (min !== null || max !== null) {
+      chips.push({
+        label: `Pinta-ala: ${min ?? '?'}–${max ?? '?'} m²`,
+        clear: () => {
+          this.neliotMin.set(null);
+          this.neliotMax.set(null);
+          TiskilistaListComponent['persistRanges']({ neliotMin: null, neliotMax: null });
+        },
+      });
+    }
+
+    const vfFrom = this.vapautuuFrom();
+    const vfTo = this.vapautuuTo();
+    if (vfFrom !== null || vfTo !== null) {
+      const fmt = (d: Date | null) => d ? d.toLocaleDateString('fi-FI') : '?';
+      chips.push({
+        label: `Vapautuu: ${fmt(vfFrom)}–${fmt(vfTo)}`,
+        clear: () => {
+          this.vapautuuFrom.set(null);
+          this.vapautuuTo.set(null);
+          TiskilistaListComponent['persistDate']('vapautuuFrom', null);
+          TiskilistaListComponent['persistDate']('vapautuuTo', null);
+        },
+      });
+    }
+
+    if (this.onKuvausTarveOnly()) {
+      chips.push({ label: 'Vain kuvaustarve', clear: () => this.toggleBool('onKuvausTarveOnly') });
+    }
+    if (this.lumoFiOnly()) {
+      chips.push({ label: 'Vain Lumo.fi', clear: () => this.toggleBool('lumoFiOnly') });
+    }
+    if (this.hasUpcomingEsittelyOnly()) {
+      chips.push({ label: 'Vain tulevat esittelyt', clear: () => this.toggleBool('hasUpcomingEsittelyOnly') });
+    }
+
+    return chips;
+  });
+
+  private multiSelectChip(chips: ActiveFilterChip[], key: MultiSelectKey, label: string): void {
+    const values = this.signalForKey(key)();
+    if (values.length === 0) return;
+    chips.push({
+      label: `${label}: ${values.join(', ')}`,
+      clear: () => {
+        this.signalForKey(key).set([]);
+        TiskilistaListComponent['persistList'](key, []);
+      },
+    });
+  }
+
+  protected clearAllFilters(): void {
+    this.searchInput.set('');
+    this.status.set(null);
+    (['lajit', 'tyypit', 'kunnat', 'kaupunginosat', 'sopimustilat', 'isannoitsijat', 'markkinoijat'] as MultiSelectKey[])
+      .forEach((key) => {
+        this.signalForKey(key).set([]);
+        TiskilistaListComponent['persistList'](key, []);
+      });
+    this.neliotMin.set(null);
+    this.neliotMax.set(null);
+    TiskilistaListComponent['persistRanges']({ neliotMin: null, neliotMax: null });
+    this.vapautuuFrom.set(null);
+    this.vapautuuTo.set(null);
+    TiskilistaListComponent['persistDate']('vapautuuFrom', null);
+    TiskilistaListComponent['persistDate']('vapautuuTo', null);
+    this.onKuvausTarveOnly.set(false);
+    this.lumoFiOnly.set(false);
+    this.hasUpcomingEsittelyOnly.set(false);
+    (['onKuvausTarveOnly', 'lumoFiOnly', 'hasUpcomingEsittelyOnly'] as BoolFilterKey[])
+      .forEach((key) => TiskilistaListComponent['persistBool'](key, false));
   }
 
   // -- Toolbar actions -------------------------------------------------------
