@@ -11,6 +11,7 @@ export interface TiskilistaDetailDto {
   readonly vapautuuAsiakkaalta: string | null;
   readonly remonttiAlkaa: string | null;
   readonly remonttiPaattyy: string | null;
+  readonly remonttityyppi: string | null;
   readonly neliot: number | null;
   readonly kerros: string | null;
   readonly kerroksia: string | null;

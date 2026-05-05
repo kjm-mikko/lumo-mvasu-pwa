@@ -11,13 +11,22 @@ import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { catchError, of, switchMap } from 'rxjs';
+import { DxToastModule } from 'devextreme-angular/ui/toast';
 
 import { TiskilistaApiService } from '../../core/services/tiskilista-api.service';
 import type { TiskilistaDetailDto } from '../../core/models/tiskilista-detail.dto';
 
+type ToastType = 'info' | 'success' | 'warning' | 'error';
+interface ToastState {
+  readonly visible: boolean;
+  readonly message: string;
+  readonly type: ToastType;
+}
+const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
+
 @Component({
   selector: 'app-tiskilista-detail',
-  imports: [RouterLink, CurrencyPipe, DatePipe, DecimalPipe],
+  imports: [DxToastModule, RouterLink, CurrencyPipe, DatePipe, DecimalPipe],
   template: `
     <main class="detail">
       <a class="back" routerLink="/tiskilista">← Takaisin tiskilistaan</a>
@@ -88,6 +97,9 @@ import type { TiskilistaDetailDto } from '../../core/models/tiskilista-detail.dt
                 </dd>
               </div>
             }
+            @if (t.remonttityyppi) {
+              <div><dt>Remonttityyppi</dt><dd>{{ t.remonttityyppi }}</dd></div>
+            }
             @if (t.tarkastusTila) {
               <div><dt>Tarkastuksen tila</dt><dd>{{ t.tarkastusTila }}</dd></div>
             }
@@ -146,9 +158,77 @@ import type { TiskilistaDetailDto } from '../../core/models/tiskilista-detail.dt
             @if (t.lisaTieto) { <p class="text-block">{{ t.lisaTieto }}</p> }
           </section>
         }
+
+        <section class="action-sheet" aria-label="Toiminnot">
+          <h2>Toiminnot</h2>
+          <ul class="action-list">
+            <li>
+              <button
+                type="button"
+                class="action action--primary"
+                (click)="pikavaraus(t)"
+              >
+                <span class="action-label">Pikavaraus</span>
+                <span class="action-hint">Tee varaus tästä huoneistosta</span>
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                class="action"
+                (click)="lisaaRemontti(t)"
+              >
+                <span class="action-label">Lisää remontti</span>
+                <span class="action-hint">Kirjaa remontin alkamis- ja päättymispäivä</span>
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                class="action"
+                (click)="laskeTiskilista(t)"
+              >
+                <span class="action-label">Laske tiskilista</span>
+                <span class="action-hint">Päivitä tiskilistan laskenta</span>
+              </button>
+            </li>
+            @if (t.lumoUrl) {
+              <li>
+                <a
+                  class="action action--link"
+                  [href]="t.lumoUrl"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  <span class="action-label">Avaa Lumo Verkossa ↗</span>
+                </a>
+              </li>
+            }
+            @if (t.brochureUrl) {
+              <li>
+                <a
+                  class="action action--link"
+                  [href]="t.brochureUrl"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  <span class="action-label">Avaa esite ↗</span>
+                </a>
+              </li>
+            }
+          </ul>
+        </section>
         }
       }
     </main>
+
+    <dx-toast
+      [visible]="toast().visible"
+      [message]="toast().message"
+      [type]="toast().type"
+      [displayTime]="2500"
+      (onHiding)="onToastHide()"
+    ></dx-toast>
   `,
   styleUrl: './tiskilista-detail.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -200,5 +280,35 @@ export class TiskilistaDetailComponent {
       ? `https://maps.apple.com/?daddr=${encodeURIComponent(dest)}`
       : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`;
     window.open(url, '_blank', 'noopener');
+  }
+
+  // -- Action sheet ----------------------------------------------------------
+
+  protected readonly toast = signal<ToastState>(TOAST_HIDDEN);
+
+  protected pikavaraus(_t: TiskilistaDetailDto): void {
+    // XAF action TiskilistaViewController.PikaVarausAction. Backend wiring
+    // is a follow-up — opens a quick-reservation form inside the PWA.
+    this.flash('Pikavaraus — toiminnallisuus tulossa', 'info');
+  }
+
+  protected lisaaRemontti(_t: TiskilistaDetailDto): void {
+    // XAF action TiskilistaViewController.LisaaRemonttiAction.
+    this.flash('Lisää remontti — toiminnallisuus tulossa', 'info');
+  }
+
+  protected laskeTiskilista(_t: TiskilistaDetailDto): void {
+    // XAF action TiskilistaViewController.LaskeTiskilistaAction. Triggers a
+    // server-side recalculation of the underlying view; until that endpoint
+    // exists we just acknowledge the click.
+    this.flash('Laske tiskilista — toiminnallisuus tulossa', 'info');
+  }
+
+  protected onToastHide(): void {
+    this.toast.set(TOAST_HIDDEN);
+  }
+
+  private flash(message: string, type: ToastType): void {
+    this.toast.set({ visible: true, message, type });
   }
 }

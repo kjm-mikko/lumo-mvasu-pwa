@@ -150,8 +150,40 @@ public sealed class TiskilistaQueryService(
 
         try
         {
-            var row = os.GetObjectByKey<XpoTiskilista>(id);
-            return Task.FromResult(row is null ? null : MapDetail(row));
+            XpoTiskilista? row;
+            try
+            {
+                row = os.GetObjectByKey<XpoTiskilista>(id);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Tiskilista {Id} failed to load — XPO threw on GetObjectByKey", id);
+                return Task.FromResult<TiskilistaDetailDto?>(null);
+            }
+
+            if (row is null) return Task.FromResult<TiskilistaDetailDto?>(null);
+
+            try
+            {
+                return Task.FromResult<TiskilistaDetailDto?>(MapDetail(row));
+            }
+            catch (Exception ex)
+            {
+                // Live data has dangling FK targets that crash eager XPO loads
+                // (CannotLoadObjectsException, etc.). Fall back to a minimal
+                // mapping that only reads fields directly on Tiskilista — the
+                // user gets *something* rather than a hard 500.
+                logger.LogWarning(ex, "Tiskilista {Id} full-detail mapping failed; falling back to minimal", id);
+                try
+                {
+                    return Task.FromResult<TiskilistaDetailDto?>(MapDetailMinimal(row));
+                }
+                catch (Exception minimalEx)
+                {
+                    logger.LogError(minimalEx, "Tiskilista {Id} minimal mapping also failed", id);
+                    return Task.FromResult<TiskilistaDetailDto?>(null);
+                }
+            }
         }
         finally
         {
@@ -229,7 +261,11 @@ public sealed class TiskilistaQueryService(
         }
         if (query.LumoFiOnly == true)
         {
-            operands.Add(new BinaryOperator("InternetMarkkinointi", true, BinaryOperatorType.Equal));
+            // Model.xafml uses Huoneisto.LumoOneEnabled for the "Lumo.fi" flag
+            // — that's the canonical "published on Lumo.fi" boolean. The local
+            // Tiskilista.InternetMarkkinointi is a broader "internet marketing
+            // consent" flag that doesn't always coincide with Lumo.fi listing.
+            operands.Add(new BinaryOperator("Huoneisto.LumoOneEnabled", true, BinaryOperatorType.Equal));
         }
 
         if (query.NeliotMin is { } neliotMin)
@@ -336,7 +372,10 @@ public sealed class TiskilistaQueryService(
         Prio: NormaliseString(t.Huoneisto?.SAP_Palveluluokka),
         Isannoitsija: NormaliseString(t.Isannoitsija),
         Markkinoija: NormaliseString(t.Markkinoija),
-        LumoFi: t.InternetMarkkinointi,
+        // Lumo.fi is the canonical Huoneisto.LumoOneEnabled flag (XAF
+        // ListView column 0). Tiskilista.InternetMarkkinointi is a broader
+        // "marketing consent" flag and does not match the Lumo.fi semantics.
+        LumoFi: t.Huoneisto?.LumoOneEnabled ?? false,
         Vuokraovi: t.Vuokraovi,
         OnKuvausTarve: t.Huoneisto?.OnKuvausTarve ?? false,
         Hissi: t.hissi,
@@ -362,6 +401,7 @@ public sealed class TiskilistaQueryService(
         VapautuuAsiakkaalta: ToOffset(t.VapautuuAsiakkaalta),
         RemonttiAlkaa: ToOffset(t.RemontinAlkamispaiva),
         RemonttiPaattyy: ToOffset(t.RemontinPaattymispaiva),
+        Remonttityyppi: NormaliseString(t.Remonttityyppi),
         Neliot: t.neliot,
         Kerros: t.kerros,
         Kerroksia: t.kerroksia,
@@ -374,7 +414,8 @@ public sealed class TiskilistaQueryService(
         Isannoitsija: NormaliseString(t.Isannoitsija),
         Markkinoija: NormaliseString(t.Markkinoija),
         TarkastusTila: ResolveTarkastusTila(t),
-        LumoFi: t.InternetMarkkinointi,
+        // Match XAF Model.xafml — Lumo.fi flag is Huoneisto.LumoOneEnabled.
+        LumoFi: t.Huoneisto?.LumoOneEnabled ?? false,
         Vuokraovi: t.Vuokraovi,
         OnKuvausTarve: t.Huoneisto?.OnKuvausTarve ?? false,
         Muistio: t.muistio,
@@ -408,4 +449,57 @@ public sealed class TiskilistaQueryService(
             return null;
         }
     }
+
+    /// <summary>
+    /// Fallback projection that reads only fields directly on Tiskilista.
+    /// Used when MapDetail throws — typically when an associated row
+    /// (Huoneisto, Tarkastukset, Talousyksikkö) has dangling FK targets
+    /// that crash XPO's eager-load. The user still sees the apartment
+    /// rather than a hard 500.
+    /// </summary>
+    private static TiskilistaDetailDto MapDetailMinimal(XpoTiskilista t) => new(
+        Id: t.OID,
+        Osoite: t.katuosoite ?? string.Empty,
+        Postinumero: t.Postinumero,
+        Postitoimipaikka: t.Postitoimipaikka,
+        Tyyppi: t.tyyppi,
+        Laji: t.laji,
+        Vuokra: t.vuokra,
+        Vapautuu: ToOffset(t.vapautuu),
+        Poismuutto: ToOffset(t.poismuutto),
+        VapautuuAsiakkaalta: ToOffset(t.VapautuuAsiakkaalta),
+        RemonttiAlkaa: ToOffset(t.RemontinAlkamispaiva),
+        RemonttiPaattyy: ToOffset(t.RemontinPaattymispaiva),
+        Remonttityyppi: NormaliseString(t.Remonttityyppi),
+        Neliot: t.neliot,
+        Kerros: t.kerros,
+        Kerroksia: t.kerroksia,
+        Tila: t.Tila,
+        SopimusTila: t.SopimusTila,
+        Kunta: t.kunta,
+        Kaupunginosa: t.KuntaAlue,
+        Markkinointialue: t.Markkinointialue,
+        Prio: null,                                  // Huoneisto-traversal
+        Isannoitsija: NormaliseString(t.Isannoitsija),
+        Markkinoija: NormaliseString(t.Markkinoija),
+        TarkastusTila: null,                         // Huoneisto-traversal
+        LumoFi: false,                               // Huoneisto-traversal (Huoneisto.LumoOneEnabled)
+        Vuokraovi: t.Vuokraovi,
+        OnKuvausTarve: false,                        // Huoneisto-traversal
+        Muistio: t.muistio,
+        HuoneistoMuistio: null,                      // Huoneisto-traversal
+        Kuvaus: t.kuvaus,
+        LisaTieto: t.LisaTieto,
+        BrochureUrl: null,                           // Huoneisto-traversal
+        Hissi: t.hissi,
+        Parveke: t.parveke,
+        Sauna: t.sauna,
+        YhteissaUna: t.yhtsauna,
+        Vesimittaus: t.vesimittaus,
+        Pesula: t.pesula,
+        Astianpesukone: t.astianpesukone,
+        Aluetoimisto: t.Aluetoimisto,
+        Latitude: t.Latitude == 0 ? null : t.Latitude,
+        Longitude: t.Longitude == 0 ? null : t.Longitude,
+        LumoUrl: null);                              // Huoneisto-traversal
 }

@@ -16,6 +16,7 @@ import { DxButtonModule } from 'devextreme-angular/ui/button';
 import { DxDateBoxModule } from 'devextreme-angular/ui/date-box';
 import { DxNumberBoxModule } from 'devextreme-angular/ui/number-box';
 import { DxTagBoxModule } from 'devextreme-angular/ui/tag-box';
+import { DxToastModule } from 'devextreme-angular/ui/toast';
 
 import { TiskilistaApiService } from '../../core/services/tiskilista-api.service';
 import { LocationService } from '../../core/services/location.service';
@@ -35,6 +36,14 @@ import {
 
 type MultiSelectKey = 'lajit' | 'tyypit' | 'kunnat' | 'kaupunginosat' | 'sopimustilat' | 'isannoitsijat' | 'markkinoijat';
 type BoolFilterKey = 'onKuvausTarveOnly' | 'lumoFiOnly';
+
+type ToastType = 'info' | 'success' | 'warning' | 'error';
+interface ToastState {
+  readonly visible: boolean;
+  readonly message: string;
+  readonly type: ToastType;
+}
+const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
 
 /** Returns true when both Date instances represent the same calendar day. */
 function sameDay(a: Date | null, b: Date | null): boolean {
@@ -57,7 +66,7 @@ function toIsoDate(d: Date | null): string | null {
 @Component({
   selector: 'app-tiskilista-list',
   imports: [
-    DxButtonModule, DxDateBoxModule, DxNumberBoxModule, DxTagBoxModule,
+    DxButtonModule, DxDateBoxModule, DxNumberBoxModule, DxTagBoxModule, DxToastModule,
     RouterLink, FormsModule, CurrencyPipe, DatePipe, DecimalPipe,
   ],
   template: `
@@ -69,13 +78,27 @@ function toIsoDate(d: Date | null): string | null {
             <span class="count">{{ p.total }} huoneistoa</span>
           }
         </div>
-        <dx-button
-          class="header-search"
-          icon="search"
-          stylingMode="text"
-          [elementAttr]="{ 'aria-label': 'Avaa pikahaku' }"
-          (onClick)="openQuickSearch()"
-        ></dx-button>
+        <div class="header-actions">
+          <dx-button
+            icon="refresh"
+            stylingMode="text"
+            [disabled]="loading()"
+            [elementAttr]="{ 'aria-label': 'Päivitä lista' }"
+            (onClick)="refreshList()"
+          ></dx-button>
+          <dx-button
+            icon="datafield"
+            stylingMode="text"
+            [elementAttr]="{ 'aria-label': 'Laske tiskilista' }"
+            (onClick)="laskeTiskilista()"
+          ></dx-button>
+          <dx-button
+            icon="search"
+            stylingMode="text"
+            [elementAttr]="{ 'aria-label': 'Avaa pikahaku' }"
+            (onClick)="openQuickSearch()"
+          ></dx-button>
+        </div>
       </header>
 
       <section class="filters" role="search">
@@ -357,6 +380,14 @@ function toIsoDate(d: Date | null): string | null {
         }
       }
     </main>
+
+    <dx-toast
+      [visible]="toast().visible"
+      [message]="toast().message"
+      [type]="toast().type"
+      [displayTime]="2500"
+      (onHiding)="onToastHide()"
+    ></dx-toast>
   `,
   styleUrl: './tiskilista-list.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -712,6 +743,36 @@ export class TiskilistaListComponent {
     if (page < 1) return;
     if (page > this.totalPages()) return;
     this.pageNumber.set(page);
+  }
+
+  // -- Toolbar actions -------------------------------------------------------
+
+  protected readonly toast = signal<ToastState>(TOAST_HIDDEN);
+
+  protected refreshList(): void {
+    this.loading.set(true);
+    this.loadError.set(false);
+    this.api.list(this.query())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (p) => { this.loading.set(false); this.page.set(p); this.flash('Lista päivitetty', 'success'); },
+        error: () => { this.loading.set(false); this.loadError.set(true); },
+      });
+  }
+
+  protected laskeTiskilista(): void {
+    // Server-side recalculation of the Tiskilista — XAF action
+    // TiskilistaViewController.LaskeTiskilistaAction. Wires to a backend
+    // endpoint in a follow-up; today this is a stub that surfaces intent.
+    this.flash('Laske tiskilista — toiminnallisuus tulossa', 'info');
+  }
+
+  protected onToastHide(): void {
+    this.toast.set(TOAST_HIDDEN);
+  }
+
+  private flash(message: string, type: ToastState['type']): void {
+    this.toast.set({ visible: true, message, type });
   }
 
   /**

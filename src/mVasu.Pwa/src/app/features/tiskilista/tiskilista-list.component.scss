@@ -22,7 +22,12 @@ header {
     min-width: 0;
   }
 
-  .header-search { flex: 0 0 auto; }
+  .header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--lumo-space-xs);
+    flex: 0 0 auto;
+  }
 
   h1 {
     font-family: var(--lumo-font-heading);

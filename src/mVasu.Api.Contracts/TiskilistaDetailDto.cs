@@ -13,6 +13,7 @@ public sealed record TiskilistaDetailDto(
     DateTimeOffset? VapautuuAsiakkaalta,
     DateTimeOffset? RemonttiAlkaa,
     DateTimeOffset? RemonttiPaattyy,
+    string? Remonttityyppi,
     float? Neliot,
     string? Kerros,
     string? Kerroksia,
