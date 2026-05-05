@@ -1,8 +1,12 @@
 import {
   ApplicationConfig,
+  LOCALE_ID,
   provideZoneChangeDetection,
   isDevMode,
 } from '@angular/core';
+import { registerLocaleData } from '@angular/common';
+import localeFi from '@angular/common/locales/fi';
+import localeFiExtra from '@angular/common/locales/extra/fi';
 import {
   provideRouter,
   withComponentInputBinding,
@@ -38,6 +42,10 @@ import {
 
 import { routes } from './app.routes';
 import { environment } from '../environments/environment';
+
+// Make every Angular pipe (currency / number / date) default to fi-FI:
+// space thousand separator, comma decimal, "1 006,00 €", "01.05.2001".
+registerLocaleData(localeFi, 'fi', localeFiExtra);
 
 function msalInstanceFactory(): IPublicClientApplication {
   return new PublicClientApplication({
@@ -96,6 +104,7 @@ function msalInterceptorConfigFactory(): MsalInterceptorConfiguration {
 
 export const appConfig: ApplicationConfig = {
   providers: [
+    { provide: LOCALE_ID, useValue: 'fi-FI' },
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(
       routes,
