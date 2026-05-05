@@ -130,6 +130,7 @@ public sealed class TiskilistaQueryService(
                 Tyypit: DistinctSorted(rows, t => t.tyyppi),
                 Kunnat: DistinctSorted(rows, t => t.kunta),
                 Kaupunginosat: DistinctSorted(rows, t => t.KuntaAlue),
+                KaupunginosatByKunta: DistinctKuntaKaupunginosaPairs(rows),
                 Sopimustilat: DistinctSorted(rows, t => t.SopimusTila),
                 Isannoitsijat: DistinctSorted(rows, t => t.Isannoitsija),
                 Markkinoijat: DistinctSorted(rows, t => t.Markkinoija),
@@ -139,6 +140,19 @@ public sealed class TiskilistaQueryService(
         {
             os.Dispose();
         }
+    }
+
+    private static IReadOnlyList<TiskilistaKuntaKaupunginosaDto> DistinctKuntaKaupunginosaPairs(
+        XpoTiskilista[] rows)
+    {
+        var fi = StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("fi-FI"), ignoreCase: true);
+        return rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.kunta) && !string.IsNullOrWhiteSpace(r.KuntaAlue))
+            .Select(r => new TiskilistaKuntaKaupunginosaDto(r.kunta!.Trim(), r.KuntaAlue!.Trim()))
+            .DistinctBy(p => $"{p.Kunta}|{p.Kaupunginosa}", StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p.Kunta, fi)
+            .ThenBy(p => p.Kaupunginosa, fi)
+            .ToArray();
     }
 
     private static IReadOnlyList<string> DistinctSorted(

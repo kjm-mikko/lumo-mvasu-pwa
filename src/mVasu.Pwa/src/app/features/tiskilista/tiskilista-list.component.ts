@@ -493,13 +493,24 @@ export class TiskilistaListComponent {
 
   /**
    * Kaupunginosa list narrows when one or more kunta is selected — only
-   * districts that exist for those municipalities should be offered.
-   * Without a fetched mapping we can't actually scope; fall back to the
-   * full distinct list for now and treat the cascading filter as a
-   * server-side concern (the InOperator on KuntaAlue still respects
-   * the selection regardless of which kunta provides the value).
+   * districts that exist for those municipalities show up. Falls back
+   * to the full distinct list when no kunta is chosen so the dropdown
+   * still works as a free-form filter.
    */
-  protected readonly kaupunginosatVisible = computed<string[]>(() => [...this.distinctValues().kaupunginosat]);
+  protected readonly kaupunginosatVisible = computed<string[]>(() => {
+    const dv = this.distinctValues();
+    const selectedKunnat = this.kunnat();
+    if (selectedKunnat.length === 0) {
+      return [...dv.kaupunginosat];
+    }
+    const kuntaSet = new Set(selectedKunnat.map((k) => k.toLocaleLowerCase('fi-FI')));
+    const fi = new Intl.Collator('fi-FI', { sensitivity: 'base' });
+    return [...new Set(
+      dv.kaupunginosatByKunta
+        .filter((p) => kuntaSet.has(p.kunta.toLocaleLowerCase('fi-FI')))
+        .map((p) => p.kaupunginosa),
+    )].sort((a, b) => fi.compare(a, b));
+  });
 
   protected onMultiSelectChanged(key: MultiSelectKey, event: { value?: string[] | null }): void {
     const next = event.value ?? [];
@@ -736,6 +747,19 @@ export class TiskilistaListComponent {
       this.hasUpcomingEsittelyOnly();
       this.sortBy();
       this.pageNumber.set(1);
+    }, { allowSignalWrites: true });
+
+    // Auto-prune orphan kaupunginosa selections when kunta selection changes:
+    // if user picked Helsinki/Kamppi and then switches kunta to Tampere, the
+    // Kamppi tag should drop instead of silently filtering rows to none.
+    effect(() => {
+      const visible = new Set(this.kaupunginosatVisible());
+      const current = this.kaupunginosat();
+      const pruned = current.filter((k) => visible.has(k));
+      if (pruned.length !== current.length) {
+        this.kaupunginosat.set(pruned);
+        TiskilistaListComponent['persistList']('kaupunginosat', pruned);
+      }
     }, { allowSignalWrites: true });
 
     // Fetch distinct values once on init for the filter dropdowns.
