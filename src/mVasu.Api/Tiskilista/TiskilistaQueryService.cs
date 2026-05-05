@@ -119,6 +119,7 @@ public sealed class TiskilistaQueryService(
                 Kaupunginosat: DistinctSorted(rows, t => t.KuntaAlue),
                 Sopimustilat: DistinctSorted(rows, t => t.SopimusTila),
                 Isannoitsijat: DistinctSorted(rows, t => t.Isannoitsija),
+                Markkinoijat: DistinctSorted(rows, t => t.Markkinoija),
                 Tilat: DistinctSorted(rows, t => t.Tila)));
         }
         finally
@@ -217,6 +218,19 @@ public sealed class TiskilistaQueryService(
         AddInFilter(operands, "kunta", query.Kunnat);
         AddInFilter(operands, "KuntaAlue", query.Kaupunginosat);
         AddInFilter(operands, "SopimusTila", query.Sopimustilat);
+        AddInFilter(operands, "Isannoitsija", query.Isannoitsijat);
+        AddInFilter(operands, "Markkinoija", query.Markkinoijat);
+
+        if (query.OnKuvausTarveOnly == true)
+        {
+            // Bool filter — only surface rows that need photography. The flag
+            // lives on the linked Huoneisto, not on Tiskilista itself.
+            operands.Add(new BinaryOperator("Huoneisto.OnKuvausTarve", true, BinaryOperatorType.Equal));
+        }
+        if (query.LumoFiOnly == true)
+        {
+            operands.Add(new BinaryOperator("InternetMarkkinointi", true, BinaryOperatorType.Equal));
+        }
 
         if (query.NeliotMin is { } neliotMin)
         {

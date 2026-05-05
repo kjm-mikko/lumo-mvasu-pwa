@@ -33,7 +33,8 @@ import {
   TISKILISTA_LAJI_OPTIONS,
 } from '../../core/models/tiskilista-list-query.dto';
 
-type MultiSelectKey = 'lajit' | 'tyypit' | 'kunnat' | 'kaupunginosat' | 'sopimustilat';
+type MultiSelectKey = 'lajit' | 'tyypit' | 'kunnat' | 'kaupunginosat' | 'sopimustilat' | 'isannoitsijat' | 'markkinoijat';
+type BoolFilterKey = 'onKuvausTarveOnly' | 'lumoFiOnly';
 
 /** Returns true when both Date instances represent the same calendar day. */
 function sameDay(a: Date | null, b: Date | null): boolean {
@@ -176,6 +177,32 @@ function toIsoDate(d: Date | null): string | null {
             [elementAttr]="{ 'aria-label': 'Sopimustila' }"
             (onValueChanged)="onMultiSelectChanged('sopimustilat', $event)"
           ></dx-tag-box>
+
+          <dx-tag-box
+            [items]="distinctIsannoitsijaData()"
+            [value]="isannoitsijatMutable()"
+            [searchEnabled]="true"
+            [showSelectionControls]="true"
+            [showClearButton]="true"
+            [acceptCustomValue]="false"
+            stylingMode="outlined"
+            placeholder="Kaikki isännöitsijät"
+            [elementAttr]="{ 'aria-label': 'Isännöitsijä' }"
+            (onValueChanged)="onMultiSelectChanged('isannoitsijat', $event)"
+          ></dx-tag-box>
+
+          <dx-tag-box
+            [items]="distinctMarkkinoijaData()"
+            [value]="markkinoijatMutable()"
+            [searchEnabled]="true"
+            [showSelectionControls]="true"
+            [showClearButton]="true"
+            [acceptCustomValue]="false"
+            stylingMode="outlined"
+            placeholder="Kaikki markkinoijat"
+            [elementAttr]="{ 'aria-label': 'Markkinoija' }"
+            (onValueChanged)="onMultiSelectChanged('markkinoijat', $event)"
+          ></dx-tag-box>
         </div>
 
         <div class="range-grid">
@@ -224,6 +251,21 @@ function toIsoDate(d: Date | null): string | null {
               (onValueChanged)="onDateRangeChanged('vapautuuTo', $event)"
             ></dx-date-box>
           </div>
+        </div>
+
+        <div class="bool-toggles" role="group" aria-label="Pikasuodatukset">
+          <button
+            type="button"
+            [attr.aria-pressed]="onKuvausTarveOnly()"
+            [class.active]="onKuvausTarveOnly()"
+            (click)="toggleBool('onKuvausTarveOnly')"
+          >Vain kuvaustarve</button>
+          <button
+            type="button"
+            [attr.aria-pressed]="lumoFiOnly()"
+            [class.active]="lumoFiOnly()"
+            (click)="toggleBool('lumoFiOnly')"
+          >Vain Lumo.fi</button>
         </div>
 
         <select
@@ -339,6 +381,12 @@ export class TiskilistaListComponent {
   protected readonly kunnat = signal<ReadonlyArray<string>>(TiskilistaListComponent.loadList('kunnat'));
   protected readonly kaupunginosat = signal<ReadonlyArray<string>>(TiskilistaListComponent.loadList('kaupunginosat'));
   protected readonly sopimustilat = signal<ReadonlyArray<string>>(TiskilistaListComponent.loadList('sopimustilat'));
+  protected readonly isannoitsijat = signal<ReadonlyArray<string>>(TiskilistaListComponent.loadList('isannoitsijat'));
+  protected readonly markkinoijat = signal<ReadonlyArray<string>>(TiskilistaListComponent.loadList('markkinoijat'));
+
+  // Boolean filters — only "true" surfaces a constraint; "false" means "no filter".
+  protected readonly onKuvausTarveOnly = signal<boolean>(TiskilistaListComponent.loadBool('onKuvausTarveOnly'));
+  protected readonly lumoFiOnly = signal<boolean>(TiskilistaListComponent.loadBool('lumoFiOnly'));
 
   // Range filters — persisted as a single JSON object so we don't pile up
   // five more localStorage keys.
@@ -361,6 +409,8 @@ export class TiskilistaListComponent {
   protected readonly distinctTyyppiData = computed<string[]>(() => [...this.distinctValues().tyypit]);
   protected readonly distinctKuntaData = computed<string[]>(() => [...this.distinctValues().kunnat]);
   protected readonly distinctSopimustilaData = computed<string[]>(() => [...this.distinctValues().sopimustilat]);
+  protected readonly distinctIsannoitsijaData = computed<string[]>(() => [...this.distinctValues().isannoitsijat]);
+  protected readonly distinctMarkkinoijaData = computed<string[]>(() => [...this.distinctValues().markkinoijat]);
 
   /** Mutable [value] sources — DX wants a fresh string[] reference per render. */
   protected readonly lajitMutable = computed<string[]>(() => [...this.lajit()]);
@@ -368,6 +418,8 @@ export class TiskilistaListComponent {
   protected readonly kunnatMutable = computed<string[]>(() => [...this.kunnat()]);
   protected readonly kaupunginosatMutable = computed<string[]>(() => [...this.kaupunginosat()]);
   protected readonly sopimustilatMutable = computed<string[]>(() => [...this.sopimustilat()]);
+  protected readonly isannoitsijatMutable = computed<string[]>(() => [...this.isannoitsijat()]);
+  protected readonly markkinoijatMutable = computed<string[]>(() => [...this.markkinoijat()]);
 
   /**
    * Kaupunginosa list narrows when one or more kunta is selected — only
@@ -398,7 +450,35 @@ export class TiskilistaListComponent {
       case 'kunnat': return this.kunnat;
       case 'kaupunginosat': return this.kaupunginosat;
       case 'sopimustilat': return this.sopimustilat;
+      case 'isannoitsijat': return this.isannoitsijat;
+      case 'markkinoijat': return this.markkinoijat;
     }
+  }
+
+  // -- Boolean filters -------------------------------------------------------
+
+  protected toggleBool(key: BoolFilterKey): void {
+    const sig = key === 'onKuvausTarveOnly' ? this.onKuvausTarveOnly : this.lumoFiOnly;
+    const next = !sig();
+    sig.set(next);
+    TiskilistaListComponent.persistBool(key, next);
+  }
+
+  private static loadBool(key: BoolFilterKey): boolean {
+    if (typeof localStorage === 'undefined') return false;
+    return localStorage.getItem(TiskilistaListComponent.STORAGE_PREFIX + key) === 'true';
+  }
+
+  private static persistBool(key: BoolFilterKey, value: boolean): void {
+    if (typeof localStorage === 'undefined') return;
+    const storageKey = TiskilistaListComponent.STORAGE_PREFIX + key;
+    try {
+      if (value) {
+        localStorage.setItem(storageKey, 'true');
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    } catch { /* quota / private mode */ }
   }
 
   private static loadList(key: MultiSelectKey): ReadonlyArray<string> {
@@ -541,10 +621,14 @@ export class TiskilistaListComponent {
       kunnat: this.kunnat(),
       kaupunginosat: this.kaupunginosat(),
       sopimustilat: this.sopimustilat(),
+      isannoitsijat: this.isannoitsijat(),
+      markkinoijat: this.markkinoijat(),
       neliotMin: this.neliotMin(),
       neliotMax: this.neliotMax(),
       vapautuuFrom: toIsoDate(this.vapautuuFrom()),
       vapautuuTo: toIsoDate(this.vapautuuTo()),
+      onKuvausTarveOnly: this.onKuvausTarveOnly(),
+      lumoFiOnly: this.lumoFiOnly(),
       scope: this.scope(),
       sortBy: this.sortBy(),
       userLat: pos?.coords.latitude ?? null,
@@ -565,10 +649,14 @@ export class TiskilistaListComponent {
       this.kunnat();
       this.kaupunginosat();
       this.sopimustilat();
+      this.isannoitsijat();
+      this.markkinoijat();
       this.neliotMin();
       this.neliotMax();
       this.vapautuuFrom();
       this.vapautuuTo();
+      this.onKuvausTarveOnly();
+      this.lumoFiOnly();
       this.sortBy();
       // Skip on the initial run; rely on the query effect to load page 1.
       if (this.pageNumber() !== 1) this.pageNumber.set(1);

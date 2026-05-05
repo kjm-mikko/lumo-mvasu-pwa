@@ -10,6 +10,7 @@ export interface TiskilistaDistinctValuesDto {
   readonly kaupunginosat: ReadonlyArray<string>;
   readonly sopimustilat: ReadonlyArray<string>;
   readonly isannoitsijat: ReadonlyArray<string>;
+  readonly markkinoijat: ReadonlyArray<string>;
   readonly tilat: ReadonlyArray<string>;
 }
 
@@ -20,5 +21,6 @@ export const EMPTY_TISKILISTA_DISTINCT_VALUES: TiskilistaDistinctValuesDto = {
   kaupunginosat: [],
   sopimustilat: [],
   isannoitsijat: [],
+  markkinoijat: [],
   tilat: [],
 };
