@@ -169,6 +169,21 @@ h2 {
 .status { color: var(--lumo-text-secondary); }
 .error { color: var(--lumo-danger); }
 
+.esittely-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-sm);
+  padding: var(--lumo-space-md) var(--lumo-space-lg);
+  background: #ece1ff;
+  color: #4527a0;
+  border-radius: var(--lumo-radius-md);
+  border-left: 4px solid #4527a0;
+  font-weight: var(--lumo-fw-medium);
+
+  .esittely-icon { font-size: 18px; }
+  .esittely-text { font-size: var(--lumo-fs-body); }
+}
+
 .action-sheet {
   margin-top: var(--lumo-space-md);
   padding: var(--lumo-space-lg);

@@ -264,6 +264,21 @@ header {
     }
   }
 
+  .esittely-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--lumo-space-xs);
+    align-self: stretch;
+    padding: var(--lumo-space-xs) var(--lumo-space-md);
+    background: #ece1ff;          // pastel purple, matches Esittely tila pill
+    color: #4527a0;
+    border-radius: var(--lumo-radius-sm);
+    font-size: var(--lumo-fs-small);
+    font-weight: var(--lumo-fw-medium);
+
+    .esittely-icon { font-size: 14px; }
+  }
+
   .card-id {
     display: inline-flex;
     gap: 2px;

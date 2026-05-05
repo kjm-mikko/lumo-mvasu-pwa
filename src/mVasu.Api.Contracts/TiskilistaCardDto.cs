@@ -30,6 +30,7 @@ public sealed record TiskilistaCardDto(
     bool Hissi,
     bool Parveke,
     bool Sauna,
+    DateTimeOffset? NextEsittelyAt,
     double? Latitude,
     double? Longitude,
     double? DistanceKm);

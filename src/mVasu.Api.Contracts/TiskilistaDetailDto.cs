@@ -42,6 +42,7 @@ public sealed record TiskilistaDetailDto(
     bool Pesula,
     bool Astianpesukone,
     string? Aluetoimisto,
+    DateTimeOffset? NextEsittelyAt,
     double? Latitude,
     double? Longitude,
     string? LumoUrl);

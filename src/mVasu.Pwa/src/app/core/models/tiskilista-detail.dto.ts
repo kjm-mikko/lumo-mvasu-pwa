@@ -40,6 +40,7 @@ export interface TiskilistaDetailDto {
   readonly pesula: boolean;
   readonly astianpesukone: boolean;
   readonly aluetoimisto: string | null;
+  readonly nextEsittelyAt: string | null;
   readonly latitude: number | null;
   readonly longitude: number | null;
   readonly lumoUrl: string | null;

@@ -35,7 +35,7 @@ import {
 } from '../../core/models/tiskilista-list-query.dto';
 
 type MultiSelectKey = 'lajit' | 'tyypit' | 'kunnat' | 'kaupunginosat' | 'sopimustilat' | 'isannoitsijat' | 'markkinoijat';
-type BoolFilterKey = 'onKuvausTarveOnly' | 'lumoFiOnly';
+type BoolFilterKey = 'onKuvausTarveOnly' | 'lumoFiOnly' | 'hasUpcomingEsittelyOnly';
 
 type ToastType = 'info' | 'success' | 'warning' | 'error';
 interface ToastState {
@@ -289,6 +289,12 @@ function toIsoDate(d: Date | null): string | null {
             [class.active]="lumoFiOnly()"
             (click)="toggleBool('lumoFiOnly')"
           >Vain Lumo.fi</button>
+          <button
+            type="button"
+            [attr.aria-pressed]="hasUpcomingEsittelyOnly()"
+            [class.active]="hasUpcomingEsittelyOnly()"
+            (click)="toggleBool('hasUpcomingEsittelyOnly')"
+          >Vain tulevat esittelyt</button>
         </div>
 
         <select
@@ -329,6 +335,14 @@ function toIsoDate(d: Date | null): string | null {
                       <span class="distance">{{ item.distanceKm | number:'1.0-1' }} km</span>
                     }
                   </div>
+                  @if (item.nextEsittelyAt) {
+                    <div class="esittely-banner" role="note">
+                      <span class="esittely-icon" aria-hidden="true">📅</span>
+                      <span class="esittely-text">
+                        Esittely {{ item.nextEsittelyAt | date:'dd.MM.yyyy HH:mm' }}
+                      </span>
+                    </div>
+                  }
                   @if (item.kptunnus || item.huonetunnus) {
                     <div class="card-id">
                       @if (item.kptunnus) { <span>{{ item.kptunnus }}</span> }
@@ -418,6 +432,7 @@ export class TiskilistaListComponent {
   // Boolean filters — only "true" surfaces a constraint; "false" means "no filter".
   protected readonly onKuvausTarveOnly = signal<boolean>(TiskilistaListComponent.loadBool('onKuvausTarveOnly'));
   protected readonly lumoFiOnly = signal<boolean>(TiskilistaListComponent.loadBool('lumoFiOnly'));
+  protected readonly hasUpcomingEsittelyOnly = signal<boolean>(TiskilistaListComponent.loadBool('hasUpcomingEsittelyOnly'));
 
   // Range filters — persisted as a single JSON object so we don't pile up
   // five more localStorage keys.
@@ -489,7 +504,9 @@ export class TiskilistaListComponent {
   // -- Boolean filters -------------------------------------------------------
 
   protected toggleBool(key: BoolFilterKey): void {
-    const sig = key === 'onKuvausTarveOnly' ? this.onKuvausTarveOnly : this.lumoFiOnly;
+    const sig = key === 'onKuvausTarveOnly' ? this.onKuvausTarveOnly
+      : key === 'lumoFiOnly' ? this.lumoFiOnly
+      : this.hasUpcomingEsittelyOnly;
     const next = !sig();
     sig.set(next);
     TiskilistaListComponent.persistBool(key, next);
@@ -660,6 +677,7 @@ export class TiskilistaListComponent {
       vapautuuTo: toIsoDate(this.vapautuuTo()),
       onKuvausTarveOnly: this.onKuvausTarveOnly(),
       lumoFiOnly: this.lumoFiOnly(),
+      hasUpcomingEsittelyOnly: this.hasUpcomingEsittelyOnly(),
       scope: this.scope(),
       sortBy: this.sortBy(),
       userLat: pos?.coords.latitude ?? null,
@@ -688,6 +706,7 @@ export class TiskilistaListComponent {
       this.vapautuuTo();
       this.onKuvausTarveOnly();
       this.lumoFiOnly();
+      this.hasUpcomingEsittelyOnly();
       this.sortBy();
       // Skip on the initial run; rely on the query effect to load page 1.
       if (this.pageNumber() !== 1) this.pageNumber.set(1);

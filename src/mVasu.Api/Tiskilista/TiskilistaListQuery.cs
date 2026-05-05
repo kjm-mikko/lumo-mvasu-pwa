@@ -16,6 +16,7 @@ public sealed record TiskilistaListQuery(
     DateOnly? VapautuuTo = null,
     bool? OnKuvausTarveOnly = null,
     bool? LumoFiOnly = null,
+    bool? HasUpcomingEsittelyOnly = null,
     string Scope = "omat",
     string SortBy = "vapautuu",
     double? UserLat = null,

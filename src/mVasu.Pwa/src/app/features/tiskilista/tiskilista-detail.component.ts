@@ -47,6 +47,15 @@ const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
           </p>
         </header>
 
+        @if (t.nextEsittelyAt) {
+          <aside class="esittely-banner" role="note">
+            <span class="esittely-icon" aria-hidden="true">📅</span>
+            <span class="esittely-text">
+              Tuleva esittely {{ t.nextEsittelyAt | date:'EEEEEE d.M.yyyy klo HH:mm' }}
+            </span>
+          </aside>
+        }
+
         <section class="hero">
           <div class="hero-cell">
             <span class="label">Vuokra</span>

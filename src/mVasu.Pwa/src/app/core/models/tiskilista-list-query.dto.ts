@@ -32,6 +32,7 @@ export interface TiskilistaListQuery {
   readonly vapautuuTo: string | null;
   readonly onKuvausTarveOnly: boolean;
   readonly lumoFiOnly: boolean;
+  readonly hasUpcomingEsittelyOnly: boolean;
   readonly scope: TiskilistaScope;
   readonly sortBy: TiskilistaSortBy;
   readonly userLat: number | null;
@@ -56,6 +57,7 @@ export const DEFAULT_TISKILISTA_QUERY: TiskilistaListQuery = {
   vapautuuTo: null,
   onKuvausTarveOnly: false,
   lumoFiOnly: false,
+  hasUpcomingEsittelyOnly: false,
   scope: 'omat',
   sortBy: 'vapautuu',
   userLat: null,
