@@ -218,6 +218,26 @@ public sealed class TiskilistaQueryService(
         AddInFilter(operands, "KuntaAlue", query.Kaupunginosat);
         AddInFilter(operands, "SopimusTila", query.Sopimustilat);
 
+        if (query.NeliotMin is { } neliotMin)
+        {
+            operands.Add(new BinaryOperator("neliot", neliotMin, BinaryOperatorType.GreaterOrEqual));
+        }
+        if (query.NeliotMax is { } neliotMax)
+        {
+            operands.Add(new BinaryOperator("neliot", neliotMax, BinaryOperatorType.LessOrEqual));
+        }
+
+        if (query.VapautuuFrom is { } vfFrom)
+        {
+            operands.Add(new BinaryOperator(
+                "vapautuu", vfFrom.ToDateTime(TimeOnly.MinValue), BinaryOperatorType.GreaterOrEqual));
+        }
+        if (query.VapautuuTo is { } vfTo)
+        {
+            operands.Add(new BinaryOperator(
+                "vapautuu", vfTo.ToDateTime(new TimeOnly(23, 59, 59)), BinaryOperatorType.LessOrEqual));
+        }
+
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim();

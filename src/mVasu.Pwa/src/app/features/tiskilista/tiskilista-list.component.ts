@@ -13,6 +13,8 @@ import { Router, RouterLink } from '@angular/router';
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { catchError, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
 import { DxButtonModule } from 'devextreme-angular/ui/button';
+import { DxDateBoxModule } from 'devextreme-angular/ui/date-box';
+import { DxNumberBoxModule } from 'devextreme-angular/ui/number-box';
 import { DxTagBoxModule } from 'devextreme-angular/ui/tag-box';
 
 import { TiskilistaApiService } from '../../core/services/tiskilista-api.service';
@@ -33,9 +35,30 @@ import {
 
 type MultiSelectKey = 'lajit' | 'tyypit' | 'kunnat' | 'kaupunginosat' | 'sopimustilat';
 
+/** Returns true when both Date instances represent the same calendar day. */
+function sameDay(a: Date | null, b: Date | null): boolean {
+  if (a === null && b === null) return true;
+  if (a === null || b === null) return false;
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+}
+
+/** Format a Date as ISO yyyy-MM-dd in local time (server expects DateOnly). */
+function toIsoDate(d: Date | null): string | null {
+  if (d === null) return null;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 @Component({
   selector: 'app-tiskilista-list',
-  imports: [DxButtonModule, DxTagBoxModule, RouterLink, FormsModule, CurrencyPipe, DatePipe, DecimalPipe],
+  imports: [
+    DxButtonModule, DxDateBoxModule, DxNumberBoxModule, DxTagBoxModule,
+    RouterLink, FormsModule, CurrencyPipe, DatePipe, DecimalPipe,
+  ],
   template: `
     <main class="tiskilista">
       <header>
@@ -155,6 +178,54 @@ type MultiSelectKey = 'lajit' | 'tyypit' | 'kunnat' | 'kaupunginosat' | 'sopimus
           ></dx-tag-box>
         </div>
 
+        <div class="range-grid">
+          <div class="range-pair" role="group" aria-label="Pinta-ala (m²)">
+            <span class="range-label">Pinta-ala m²</span>
+            <dx-number-box
+              [value]="$any(neliotMin())"
+              [showClearButton]="true"
+              [min]="0"
+              [step]="5"
+              stylingMode="outlined"
+              placeholder="min"
+              (onValueChanged)="onNumberRangeChanged('neliotMin', $event)"
+            ></dx-number-box>
+            <span class="range-sep">–</span>
+            <dx-number-box
+              [value]="$any(neliotMax())"
+              [showClearButton]="true"
+              [min]="0"
+              [step]="5"
+              stylingMode="outlined"
+              placeholder="max"
+              (onValueChanged)="onNumberRangeChanged('neliotMax', $event)"
+            ></dx-number-box>
+          </div>
+
+          <div class="range-pair" role="group" aria-label="Vapautuu">
+            <span class="range-label">Vapautuu</span>
+            <dx-date-box
+              [value]="$any(vapautuuFrom())"
+              [showClearButton]="true"
+              displayFormat="dd.MM.yyyy"
+              type="date"
+              stylingMode="outlined"
+              placeholder="alkaen"
+              (onValueChanged)="onDateRangeChanged('vapautuuFrom', $event)"
+            ></dx-date-box>
+            <span class="range-sep">–</span>
+            <dx-date-box
+              [value]="$any(vapautuuTo())"
+              [showClearButton]="true"
+              displayFormat="dd.MM.yyyy"
+              type="date"
+              stylingMode="outlined"
+              placeholder="päättyen"
+              (onValueChanged)="onDateRangeChanged('vapautuuTo', $event)"
+            ></dx-date-box>
+          </div>
+        </div>
+
         <select
           class="sort"
           [ngModel]="sortBy()"
@@ -268,6 +339,14 @@ export class TiskilistaListComponent {
   protected readonly kunnat = signal<ReadonlyArray<string>>(TiskilistaListComponent.loadList('kunnat'));
   protected readonly kaupunginosat = signal<ReadonlyArray<string>>(TiskilistaListComponent.loadList('kaupunginosat'));
   protected readonly sopimustilat = signal<ReadonlyArray<string>>(TiskilistaListComponent.loadList('sopimustilat'));
+
+  // Range filters — persisted as a single JSON object so we don't pile up
+  // five more localStorage keys.
+  protected readonly neliotMin = signal<number | null>(TiskilistaListComponent.loadRanges().neliotMin);
+  protected readonly neliotMax = signal<number | null>(TiskilistaListComponent.loadRanges().neliotMax);
+  protected readonly vapautuuFrom = signal<Date | null>(TiskilistaListComponent.loadDate('vapautuuFrom'));
+  protected readonly vapautuuTo = signal<Date | null>(TiskilistaListComponent.loadDate('vapautuuTo'));
+
   protected readonly sortBy = signal<TiskilistaSortBy>('vapautuu');
   protected readonly pageNumber = signal<number>(1);
 
@@ -348,6 +427,85 @@ export class TiskilistaListComponent {
     }
   }
 
+  // -- Range filters (numbers + dates) ---------------------------------------
+
+  protected onNumberRangeChanged(
+    key: 'neliotMin' | 'neliotMax',
+    event: { value?: number | null },
+  ): void {
+    const next = (event.value ?? null) as number | null;
+    const sig = key === 'neliotMin' ? this.neliotMin : this.neliotMax;
+    if (sig() === next) return;
+    sig.set(next);
+    TiskilistaListComponent.persistRanges({
+      neliotMin: this.neliotMin(),
+      neliotMax: this.neliotMax(),
+    });
+  }
+
+  protected onDateRangeChanged(
+    key: 'vapautuuFrom' | 'vapautuuTo',
+    event: { value?: Date | string | null },
+  ): void {
+    const raw = event.value ?? null;
+    const next = raw instanceof Date ? raw : (raw ? new Date(raw) : null);
+    const sig = key === 'vapautuuFrom' ? this.vapautuuFrom : this.vapautuuTo;
+    if (sameDay(sig(), next)) return;
+    sig.set(next);
+    TiskilistaListComponent.persistDate(key, next);
+  }
+
+  private static loadRanges(): { neliotMin: number | null; neliotMax: number | null } {
+    if (typeof localStorage === 'undefined') return { neliotMin: null, neliotMax: null };
+    try {
+      const raw = localStorage.getItem(TiskilistaListComponent.STORAGE_PREFIX + 'ranges');
+      if (!raw) return { neliotMin: null, neliotMax: null };
+      const parsed = JSON.parse(raw);
+      return {
+        neliotMin: typeof parsed?.neliotMin === 'number' ? parsed.neliotMin : null,
+        neliotMax: typeof parsed?.neliotMax === 'number' ? parsed.neliotMax : null,
+      };
+    } catch {
+      return { neliotMin: null, neliotMax: null };
+    }
+  }
+
+  private static persistRanges(value: { neliotMin: number | null; neliotMax: number | null }): void {
+    if (typeof localStorage === 'undefined') return;
+    const key = TiskilistaListComponent.STORAGE_PREFIX + 'ranges';
+    try {
+      if (value.neliotMin === null && value.neliotMax === null) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, JSON.stringify(value));
+      }
+    } catch { /* quota / private mode */ }
+  }
+
+  private static loadDate(key: 'vapautuuFrom' | 'vapautuuTo'): Date | null {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(TiskilistaListComponent.STORAGE_PREFIX + key);
+      if (!raw) return null;
+      const dt = new Date(raw);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    } catch {
+      return null;
+    }
+  }
+
+  private static persistDate(key: 'vapautuuFrom' | 'vapautuuTo', value: Date | null): void {
+    if (typeof localStorage === 'undefined') return;
+    const storageKey = TiskilistaListComponent.STORAGE_PREFIX + key;
+    try {
+      if (value === null) {
+        localStorage.removeItem(storageKey);
+      } else {
+        localStorage.setItem(storageKey, value.toISOString());
+      }
+    } catch { /* quota / private mode */ }
+  }
+
   protected readonly page = signal<TiskilistaPageDto | null>(null);
   protected readonly loading = signal<boolean>(false);
   protected readonly loadError = signal<boolean>(false);
@@ -383,6 +541,10 @@ export class TiskilistaListComponent {
       kunnat: this.kunnat(),
       kaupunginosat: this.kaupunginosat(),
       sopimustilat: this.sopimustilat(),
+      neliotMin: this.neliotMin(),
+      neliotMax: this.neliotMax(),
+      vapautuuFrom: toIsoDate(this.vapautuuFrom()),
+      vapautuuTo: toIsoDate(this.vapautuuTo()),
       scope: this.scope(),
       sortBy: this.sortBy(),
       userLat: pos?.coords.latitude ?? null,
@@ -403,6 +565,10 @@ export class TiskilistaListComponent {
       this.kunnat();
       this.kaupunginosat();
       this.sopimustilat();
+      this.neliotMin();
+      this.neliotMax();
+      this.vapautuuFrom();
+      this.vapautuuTo();
       this.sortBy();
       // Skip on the initial run; rely on the query effect to load page 1.
       if (this.pageNumber() !== 1) this.pageNumber.set(1);

@@ -28,6 +28,10 @@ export class TiskilistaApiService {
     if (query.kunnat.length > 0) params = params.set('kunta', query.kunnat.join(','));
     if (query.kaupunginosat.length > 0) params = params.set('kaupunginosa', query.kaupunginosat.join(','));
     if (query.sopimustilat.length > 0) params = params.set('sopimustila', query.sopimustilat.join(','));
+    if (query.neliotMin !== null) params = params.set('neliotMin', String(query.neliotMin));
+    if (query.neliotMax !== null) params = params.set('neliotMax', String(query.neliotMax));
+    if (query.vapautuuFrom) params = params.set('vapautuuFrom', query.vapautuuFrom);
+    if (query.vapautuuTo) params = params.set('vapautuuTo', query.vapautuuTo);
     if (query.userLat !== null) params = params.set('userLat', String(query.userLat));
     if (query.userLon !== null) params = params.set('userLon', String(query.userLon));
 

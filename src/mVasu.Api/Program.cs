@@ -258,6 +258,10 @@ app.MapGet("/api/tiskilista", async (
         string? kunta,
         string? kaupunginosa,
         string? sopimustila,
+        float? neliotMin,
+        float? neliotMax,
+        DateOnly? vapautuuFrom,
+        DateOnly? vapautuuTo,
         string? scope,
         string? sortBy,
         double? userLat,
@@ -292,6 +296,16 @@ app.MapGet("/api/tiskilista", async (
             errors[nameof(pageSize)] = [$"pageSize must be between {TiskilistaListQuery.MinPageSize} and {TiskilistaListQuery.MaxPageSize}."];
         }
 
+        // Range bounds — bail rather than silently returning empty set.
+        if (neliotMin is { } nmin && neliotMax is { } nmax && nmin > nmax)
+        {
+            errors[nameof(neliotMin)] = ["neliotMin must be less than or equal to neliotMax."];
+        }
+        if (vapautuuFrom is { } vff && vapautuuTo is { } vft && vff > vft)
+        {
+            errors[nameof(vapautuuFrom)] = ["vapautuuFrom must be on or before vapautuuTo."];
+        }
+
         if (errors.Count > 0)
         {
             return Results.ValidationProblem(errors);
@@ -309,6 +323,10 @@ app.MapGet("/api/tiskilista", async (
             Kunnat: CommaList(kunta),
             Kaupunginosat: CommaList(kaupunginosa),
             Sopimustilat: CommaList(sopimustila),
+            NeliotMin: neliotMin,
+            NeliotMax: neliotMax,
+            VapautuuFrom: vapautuuFrom,
+            VapautuuTo: vapautuuTo,
             Scope: resolvedScope,
             SortBy: resolvedSort,
             UserLat: userLat,

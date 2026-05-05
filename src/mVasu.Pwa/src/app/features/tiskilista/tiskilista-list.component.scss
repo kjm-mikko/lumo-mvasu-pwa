@@ -107,6 +107,39 @@ header {
   }
 }
 
+.range-grid {
+  flex: 1 1 100%;
+  display: grid;
+  gap: var(--lumo-space-md) var(--lumo-space-lg);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.range-pair {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--lumo-space-sm);
+
+  dx-number-box,
+  dx-date-box {
+    min-width: 0;
+  }
+
+  .range-label {
+    font-size: var(--lumo-fs-caption);
+    color: var(--lumo-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+
+  .range-sep {
+    color: var(--lumo-text-tertiary);
+    text-align: center;
+  }
+}
+
 .sort {
   background: var(--lumo-surface-elevated);
   color: var(--lumo-text-primary);

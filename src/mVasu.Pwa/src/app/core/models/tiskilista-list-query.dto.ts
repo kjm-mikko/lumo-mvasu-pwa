@@ -23,6 +23,11 @@ export interface TiskilistaListQuery {
   readonly kunnat: ReadonlyArray<string>;
   readonly kaupunginosat: ReadonlyArray<string>;
   readonly sopimustilat: ReadonlyArray<string>;
+  readonly neliotMin: number | null;
+  readonly neliotMax: number | null;
+  /** ISO date (yyyy-MM-dd) — server parses as DateOnly. */
+  readonly vapautuuFrom: string | null;
+  readonly vapautuuTo: string | null;
   readonly scope: TiskilistaScope;
   readonly sortBy: TiskilistaSortBy;
   readonly userLat: number | null;
@@ -39,6 +44,10 @@ export const DEFAULT_TISKILISTA_QUERY: TiskilistaListQuery = {
   kunnat: [],
   kaupunginosat: [],
   sopimustilat: [],
+  neliotMin: null,
+  neliotMax: null,
+  vapautuuFrom: null,
+  vapautuuTo: null,
   scope: 'omat',
   sortBy: 'vapautuu',
   userLat: null,
