@@ -14,4 +14,8 @@ public interface ITiskilistaQueryService
         ClaimsPrincipal principal,
         Guid id,
         CancellationToken cancellationToken = default);
+
+    Task<TiskilistaDistinctValuesDto?> GetDistinctValuesAsync(
+        ClaimsPrincipal principal,
+        CancellationToken cancellationToken = default);
 }

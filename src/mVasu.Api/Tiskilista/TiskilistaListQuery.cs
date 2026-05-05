@@ -3,6 +3,11 @@ namespace mVasu.Api.Tiskilista;
 public sealed record TiskilistaListQuery(
     string? Search = null,
     string? Status = null,
+    IReadOnlyList<string>? Lajit = null,
+    IReadOnlyList<string>? Tyypit = null,
+    IReadOnlyList<string>? Kunnat = null,
+    IReadOnlyList<string>? Kaupunginosat = null,
+    IReadOnlyList<string>? Sopimustilat = null,
     string Scope = "omat",
     string SortBy = "vapautuu",
     double? UserLat = null,

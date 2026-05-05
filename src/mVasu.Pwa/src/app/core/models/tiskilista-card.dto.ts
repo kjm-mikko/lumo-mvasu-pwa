@@ -6,7 +6,10 @@
 export interface TiskilistaCardDto {
   readonly id: string;
   readonly osoite: string;
+  readonly kptunnus: number | null;
+  readonly huonetunnus: number | null;
   readonly tyyppi: string | null;
+  readonly laji: string | null;
   readonly vuokra: number | null;
   readonly vapautuu: string | null;
   readonly neliot: number | null;
@@ -16,6 +19,9 @@ export interface TiskilistaCardDto {
   readonly sopimusTila: string | null;
   readonly kunta: string | null;
   readonly kaupunginosa: string | null;
+  readonly prio: string | null;
+  readonly isannoitsija: string | null;
+  readonly markkinoija: string | null;
   readonly lumoFi: boolean;
   readonly vuokraovi: boolean;
   readonly onKuvausTarve: boolean;

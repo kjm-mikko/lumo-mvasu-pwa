@@ -73,8 +73,12 @@ import type { TiskilistaDetailDto } from '../../core/models/tiskilista-detail.dt
           <dl class="grid">
             <div><dt>Tila</dt><dd>{{ t.tila || '—' }}</dd></div>
             <div><dt>Sopimustila</dt><dd>{{ t.sopimusTila || '—' }}</dd></div>
+            <div><dt>Laji</dt><dd>{{ t.laji || '—' }}</dd></div>
             <div><dt>Vapautuu</dt><dd>{{ t.vapautuu ? (t.vapautuu | date:'dd.MM.yyyy') : '—' }}</dd></div>
             <div><dt>Poismuutto</dt><dd>{{ t.poismuutto ? (t.poismuutto | date:'dd.MM.yyyy') : '—' }}</dd></div>
+            @if (t.vapautuuAsiakkaalta) {
+              <div><dt>Vapautuu asiakkaalta</dt><dd>{{ t.vapautuuAsiakkaalta | date:'dd.MM.yyyy' }}</dd></div>
+            }
             @if (t.remonttiAlkaa || t.remonttiPaattyy) {
               <div><dt>Remontti</dt>
                 <dd>
@@ -84,8 +88,20 @@ import type { TiskilistaDetailDto } from '../../core/models/tiskilista-detail.dt
                 </dd>
               </div>
             }
+            @if (t.tarkastusTila) {
+              <div><dt>Tarkastuksen tila</dt><dd>{{ t.tarkastusTila }}</dd></div>
+            }
             <div><dt>Aluetoimisto</dt><dd>{{ t.aluetoimisto || '—' }}</dd></div>
             <div><dt>Markkinointialue</dt><dd>{{ t.markkinointialue || '—' }}</dd></div>
+            @if (t.isannoitsija) {
+              <div><dt>Isännöitsijä</dt><dd>{{ t.isannoitsija }}</dd></div>
+            }
+            @if (t.markkinoija) {
+              <div><dt>Markkinoija</dt><dd>{{ t.markkinoija }}</dd></div>
+            }
+            @if (t.prio) {
+              <div><dt>Prio</dt><dd>{{ t.prio }}</dd></div>
+            }
           </dl>
         </section>
 
@@ -98,6 +114,9 @@ import type { TiskilistaDetailDto } from '../../core/models/tiskilista-detail.dt
           </ul>
           @if (t.lumoUrl) {
             <a class="external" [href]="t.lumoUrl" target="_blank" rel="noopener">Avaa lumo.fi ↗</a>
+          }
+          @if (t.brochureUrl) {
+            <a class="external" [href]="t.brochureUrl" target="_blank" rel="noopener">Avaa esite ↗</a>
           }
         </section>
 
@@ -114,10 +133,15 @@ import type { TiskilistaDetailDto } from '../../core/models/tiskilista-detail.dt
           </ul>
         </section>
 
-        @if (t.muistio || t.kuvaus || t.lisaTieto) {
+        @if (t.muistio || t.huoneistoMuistio || t.kuvaus || t.lisaTieto) {
           <section>
             <h2>Muistiot</h2>
-            @if (t.muistio) { <p class="text-block">{{ t.muistio }}</p> }
+            @if (t.muistio) {
+              <p class="text-block"><strong>Tiskilistan muistio:</strong> {{ t.muistio }}</p>
+            }
+            @if (t.huoneistoMuistio) {
+              <p class="text-block"><strong>Huoneiston muistio:</strong> {{ t.huoneistoMuistio }}</p>
+            }
             @if (t.kuvaus) { <p class="text-block">{{ t.kuvaus }}</p> }
             @if (t.lisaTieto) { <p class="text-block">{{ t.lisaTieto }}</p> }
           </section>

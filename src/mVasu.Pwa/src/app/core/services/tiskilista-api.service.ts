@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import type { TiskilistaCardDto } from '../models/tiskilista-card.dto';
 import type { TiskilistaDetailDto } from '../models/tiskilista-detail.dto';
+import type { TiskilistaDistinctValuesDto } from '../models/tiskilista-distinct-values.dto';
 import type { TiskilistaPageDto } from '../models/tiskilista-page.dto';
 import type { TiskilistaListQuery } from '../models/tiskilista-list-query.dto';
 
@@ -22,6 +23,11 @@ export class TiskilistaApiService {
 
     if (query.q) params = params.set('q', query.q);
     if (query.status) params = params.set('status', query.status);
+    if (query.lajit.length > 0) params = params.set('laji', query.lajit.join(','));
+    if (query.tyypit.length > 0) params = params.set('tyyppi', query.tyypit.join(','));
+    if (query.kunnat.length > 0) params = params.set('kunta', query.kunnat.join(','));
+    if (query.kaupunginosat.length > 0) params = params.set('kaupunginosa', query.kaupunginosat.join(','));
+    if (query.sopimustilat.length > 0) params = params.set('sopimustila', query.sopimustilat.join(','));
     if (query.userLat !== null) params = params.set('userLat', String(query.userLat));
     if (query.userLon !== null) params = params.set('userLon', String(query.userLon));
 
@@ -30,6 +36,10 @@ export class TiskilistaApiService {
 
   get(id: string): Observable<TiskilistaDetailDto> {
     return this.http.get<TiskilistaDetailDto>(`${this.baseUrl}/api/tiskilista/${id}`);
+  }
+
+  distinctValues(): Observable<TiskilistaDistinctValuesDto> {
+    return this.http.get<TiskilistaDistinctValuesDto>(`${this.baseUrl}/api/tiskilista/distinct-values`);
   }
 }
 

@@ -236,5 +236,18 @@ public class TiskilistaEndpointTests : IClassFixture<AuthenticatedWebApplication
             LastDetailId = id;
             return Task.FromResult(DetailResult);
         }
+
+        public TiskilistaDistinctValuesDto? DistinctValuesResult { get; set; } =
+            new TiskilistaDistinctValuesDto(
+                Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
+                Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
+                Array.Empty<string>());
+
+        public Task<TiskilistaDistinctValuesDto?> GetDistinctValuesAsync(
+            ClaimsPrincipal principal,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(DistinctValuesResult);
+        }
     }
 }

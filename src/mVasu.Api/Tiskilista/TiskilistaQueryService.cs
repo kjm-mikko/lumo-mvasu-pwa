@@ -83,6 +83,59 @@ public sealed class TiskilistaQueryService(
         }
     }
 
+    public Task<TiskilistaDistinctValuesDto?> GetDistinctValuesAsync(
+        ClaimsPrincipal principal,
+        CancellationToken cancellationToken = default)
+    {
+        var (user, os) = ResolveUser(principal);
+        if (user is null || os is null)
+        {
+            return Task.FromResult<TiskilistaDistinctValuesDto?>(null);
+        }
+
+        try
+        {
+            var scope = UserAreaScope.Resolve(user);
+            CriteriaOperator? criteria = scope.Unrestricted
+                ? null
+                : scope.Areas.Count == 0
+                    ? new BinaryOperator("OID", Guid.Empty, BinaryOperatorType.Equal)
+                    : new InOperator("BranchCode", scope.Areas.Cast<object>().ToArray());
+
+            var session = ((XPObjectSpace)os).Session;
+            var collection = criteria is null
+                ? new XPCollection<XpoTiskilista>(session)
+                : new XPCollection<XpoTiskilista>(session, criteria);
+
+            // Materialise once, project to distinct lists in memory.
+            // 6k rows is fine; 5 separate DISTINCT round-trips would be
+            // chattier than one collection load + LINQ Distinct.
+            var rows = collection.ToArray();
+
+            return Task.FromResult<TiskilistaDistinctValuesDto?>(new TiskilistaDistinctValuesDto(
+                Lajit: DistinctSorted(rows, t => t.laji),
+                Tyypit: DistinctSorted(rows, t => t.tyyppi),
+                Kunnat: DistinctSorted(rows, t => t.kunta),
+                Kaupunginosat: DistinctSorted(rows, t => t.KuntaAlue),
+                Sopimustilat: DistinctSorted(rows, t => t.SopimusTila),
+                Isannoitsijat: DistinctSorted(rows, t => t.Isannoitsija),
+                Tilat: DistinctSorted(rows, t => t.Tila)));
+        }
+        finally
+        {
+            os.Dispose();
+        }
+    }
+
+    private static IReadOnlyList<string> DistinctSorted(
+        XpoTiskilista[] rows, Func<XpoTiskilista, string?> selector) =>
+        rows.Select(selector)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(v => v, StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("fi-FI"), ignoreCase: true))
+            .ToArray();
+
     public Task<TiskilistaDetailDto?> GetAsync(
         ClaimsPrincipal principal,
         Guid id,
@@ -159,20 +212,44 @@ public sealed class TiskilistaQueryService(
             operands.Add(new BinaryOperator("Tila", query.Status, BinaryOperatorType.Equal));
         }
 
+        AddInFilter(operands, "laji", query.Lajit);
+        AddInFilter(operands, "tyyppi", query.Tyypit);
+        AddInFilter(operands, "kunta", query.Kunnat);
+        AddInFilter(operands, "KuntaAlue", query.Kaupunginosat);
+        AddInFilter(operands, "SopimusTila", query.Sopimustilat);
+
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim();
-            var searchCriteria = CriteriaOperator.Or(
+            var searchOperands = new List<CriteriaOperator>
+            {
                 new FunctionOperator(FunctionOperatorType.Contains, new OperandProperty("katuosoite"), search),
                 new FunctionOperator(FunctionOperatorType.Contains, new OperandProperty("kunta"), search),
                 new FunctionOperator(FunctionOperatorType.Contains, new OperandProperty("KuntaAlue"), search),
-                new FunctionOperator(FunctionOperatorType.Contains, new OperandProperty("Postitoimipaikka"), search));
-            operands.Add(searchCriteria);
+                new FunctionOperator(FunctionOperatorType.Contains, new OperandProperty("Postitoimipaikka"), search),
+            };
+
+            // Pure digits → also match kptunnus / huonetunnus exactly. Most
+            // power-users type a kptunnus to jump straight to a building.
+            if (int.TryParse(search, out var num))
+            {
+                searchOperands.Add(new BinaryOperator("kptunnus", num, BinaryOperatorType.Equal));
+                searchOperands.Add(new BinaryOperator("huonetunnus", num, BinaryOperatorType.Equal));
+            }
+
+            operands.Add(CriteriaOperator.Or(searchOperands.ToArray()));
         }
 
         return operands.Count == 0
             ? new BinaryOperator("OID", Guid.Empty, BinaryOperatorType.NotEqual)
             : CriteriaOperator.And(operands);
+    }
+
+    private static void AddInFilter(List<CriteriaOperator> operands, string property, IReadOnlyList<string>? values)
+    {
+        if (values is not { Count: > 0 }) return;
+        var arr = values.Where(s => !string.IsNullOrWhiteSpace(s)).Cast<object>().ToArray();
+        if (arr.Length > 0) operands.Add(new InOperator(property, arr));
     }
 
     private static SortProperty[] BuildSorting(string sortBy) => sortBy.ToLowerInvariant() switch
@@ -209,7 +286,10 @@ public sealed class TiskilistaQueryService(
     private static TiskilistaCardDto MapCard(XpoTiskilista t, double? distanceKm) => new(
         Id: t.OID,
         Osoite: t.katuosoite ?? string.Empty,
+        Kptunnus: t.kptunnus == 0 ? null : t.kptunnus,
+        Huonetunnus: t.huonetunnus == 0 ? null : t.huonetunnus,
         Tyyppi: t.tyyppi,
+        Laji: t.laji,
         Vuokra: t.vuokra,
         Vapautuu: ToOffset(t.vapautuu),
         Neliot: t.neliot,
@@ -219,6 +299,9 @@ public sealed class TiskilistaQueryService(
         SopimusTila: t.SopimusTila,
         Kunta: t.kunta,
         Kaupunginosa: t.KuntaAlue,
+        Prio: NormaliseString(t.Huoneisto?.SAP_Palveluluokka),
+        Isannoitsija: NormaliseString(t.Isannoitsija),
+        Markkinoija: NormaliseString(t.Markkinoija),
         LumoFi: t.InternetMarkkinointi,
         Vuokraovi: t.Vuokraovi,
         OnKuvausTarve: t.Huoneisto?.OnKuvausTarve ?? false,
@@ -229,15 +312,20 @@ public sealed class TiskilistaQueryService(
         Longitude: t.Longitude == 0 ? null : t.Longitude,
         DistanceKm: distanceKm);
 
+    private static string? NormaliseString(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value;
+
     private static TiskilistaDetailDto MapDetail(XpoTiskilista t) => new(
         Id: t.OID,
         Osoite: t.katuosoite ?? string.Empty,
         Postinumero: t.Postinumero,
         Postitoimipaikka: t.Postitoimipaikka,
         Tyyppi: t.tyyppi,
+        Laji: t.laji,
         Vuokra: t.vuokra,
         Vapautuu: ToOffset(t.vapautuu),
         Poismuutto: ToOffset(t.poismuutto),
+        VapautuuAsiakkaalta: ToOffset(t.VapautuuAsiakkaalta),
         RemonttiAlkaa: ToOffset(t.RemontinAlkamispaiva),
         RemonttiPaattyy: ToOffset(t.RemontinPaattymispaiva),
         Neliot: t.neliot,
@@ -248,12 +336,18 @@ public sealed class TiskilistaQueryService(
         Kunta: t.kunta,
         Kaupunginosa: t.KuntaAlue,
         Markkinointialue: t.Markkinointialue,
+        Prio: NormaliseString(t.Huoneisto?.SAP_Palveluluokka),
+        Isannoitsija: NormaliseString(t.Isannoitsija),
+        Markkinoija: NormaliseString(t.Markkinoija),
+        TarkastusTila: ResolveTarkastusTila(t),
         LumoFi: t.InternetMarkkinointi,
         Vuokraovi: t.Vuokraovi,
         OnKuvausTarve: t.Huoneisto?.OnKuvausTarve ?? false,
         Muistio: t.muistio,
+        HuoneistoMuistio: NormaliseString(t.Huoneisto?.Muistio),
         Kuvaus: t.kuvaus,
         LisaTieto: t.LisaTieto,
+        BrochureUrl: NormaliseString(t.Huoneisto?.BrochureUrl),
         Hissi: t.hissi,
         Parveke: t.parveke,
         Sauna: t.sauna,
@@ -265,4 +359,19 @@ public sealed class TiskilistaQueryService(
         Latitude: t.Latitude == 0 ? null : t.Latitude,
         Longitude: t.Longitude == 0 ? null : t.Longitude,
         LumoUrl: t.Huoneisto?.LumoUrl);
+
+    private static string? ResolveTarkastusTila(XpoTiskilista t)
+    {
+        // Huoneisto.LastHuoneistoTarkastusPeriodic is a non-persistent
+        // computed property; calling it can hit the DB. Wrap defensively
+        // since Tarkastukset history can be missing or malformed.
+        try
+        {
+            return NormaliseString(t.Huoneisto?.LastHuoneistoTarkastusPeriodic?.TarkastuksenTila);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }

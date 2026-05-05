@@ -253,6 +253,11 @@ app.MapGet("/api/tiskilista", async (
         ITiskilistaQueryService service,
         string? q,
         string? status,
+        string? laji,
+        string? tyyppi,
+        string? kunta,
+        string? kaupunginosa,
+        string? sopimustila,
         string? scope,
         string? sortBy,
         double? userLat,
@@ -292,9 +297,18 @@ app.MapGet("/api/tiskilista", async (
             return Results.ValidationProblem(errors);
         }
 
+        static string[]? CommaList(string? raw) => string.IsNullOrWhiteSpace(raw)
+            ? null
+            : raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
         var query = new TiskilistaListQuery(
             Search: q,
             Status: status,
+            Lajit: CommaList(laji),
+            Tyypit: CommaList(tyyppi),
+            Kunnat: CommaList(kunta),
+            Kaupunginosat: CommaList(kaupunginosa),
+            Sopimustilat: CommaList(sopimustila),
             Scope: resolvedScope,
             SortBy: resolvedSort,
             UserLat: userLat,
@@ -312,6 +326,24 @@ app.MapGet("/api/tiskilista", async (
     })
     .WithName("GetTiskilista")
     .WithSummary("Lists Tiskilista entries filtered by scope, status and free text. Optional distance sort uses userLat/userLon.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/tiskilista/distinct-values", async (
+        ClaimsPrincipal user,
+        ITiskilistaQueryService service,
+        CancellationToken ct) =>
+    {
+        var values = await service.GetDistinctValuesAsync(user, ct);
+        return values is null
+            ? Results.Problem(
+                title: "User not provisioned",
+                detail: "Authenticated principal could not be resolved to a Lumo mVasu user.",
+                statusCode: StatusCodes.Status403Forbidden)
+            : Results.Ok(values);
+    })
+    .WithName("GetTiskilistaDistinctValues")
+    .WithSummary("Returns sorted distinct dimensions (laji, tyyppi, kunta, kaupunginosa, sopimustila, isannoitsija, tila) " +
+                 "scoped to the user's BranchCode visibility — used to populate filter dropdowns.")
     .RequireAuthorization(AccessAsUserPolicy);
 
 app.MapGet("/api/tiskilista/{id:guid}", async (
