@@ -13,4 +13,5 @@ public sealed record TiskilistaDistinctValuesDto(
     IReadOnlyList<string> Kaupunginosat,
     IReadOnlyList<string> Sopimustilat,
     IReadOnlyList<string> Isannoitsijat,
+    IReadOnlyList<string> Markkinoijat,
     IReadOnlyList<string> Tilat);

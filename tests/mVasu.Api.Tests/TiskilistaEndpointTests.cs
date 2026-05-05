@@ -241,7 +241,7 @@ public class TiskilistaEndpointTests : IClassFixture<AuthenticatedWebApplication
             new TiskilistaDistinctValuesDto(
                 Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
                 Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
-                Array.Empty<string>());
+                Array.Empty<string>(), Array.Empty<string>());
 
         public Task<TiskilistaDistinctValuesDto?> GetDistinctValuesAsync(
             ClaimsPrincipal principal,
