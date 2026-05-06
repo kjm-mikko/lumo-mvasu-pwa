@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup Label="xVasu private feed (kjm-sk-ado) — pin all sub-packages to the same CI tag">
-    <PackageReference Include="xVasu.Module" Version="1.1.0-CI-1802" />
+    <PackageReference Include="xVasu.Module" Version="1.1.0-CI-1808" />
   </ItemGroup>
 
   <ItemGroup Label="Pin transitive packages past known vulnerabilities">
