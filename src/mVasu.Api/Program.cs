@@ -66,6 +66,9 @@ builder.Services.AddScoped<IUserSettingsService, XpoUserSettingsService>();
 builder.Services.AddScoped<ITiskilistaQueryService, TiskilistaQueryService>();
 builder.Services.AddScoped<ITaskQueryService, TaskQueryService>();
 builder.Services.AddScoped<ICustomerQueryService, XpoCustomerQueryService>();
+// Singleton — derived from xVasu.Module attributes that only change on
+// NuGet upgrade. No DB / DI dependencies, safe to construct at boot.
+builder.Services.AddSingleton<CustomerMetadataService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 
 builder.Services.AddVasuXpo(builder.Configuration);
@@ -522,6 +525,14 @@ app.MapGet("/api/customers/{id:int}", async (
     .WithName("GetCustomerById")
     .WithSummary("Returns the full Asiakas row by AsiakasNumero. 404 when " +
                  "the row doesn't exist or the caller lacks XPO permission to see it.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
+app.MapGet("/api/customers/metadata", (CustomerMetadataService metadata) =>
+        Results.Ok(metadata.GetMetadata()))
+    .WithName("GetCustomerMetadata")
+    .WithSummary("XAF / Model.xafml metadata for Henkilö / Yritys / Yhteyshenkilö " +
+                 "detail views — required, read-only, maxLength, mask and class-level " +
+                 "appearance rules. Cached per process; static across requests.")
     .RequireAuthorization(AccessAsUserPolicy);
 
 app.MapGet("/api/search", async (
