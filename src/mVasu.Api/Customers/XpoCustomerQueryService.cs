@@ -458,12 +458,25 @@ public sealed class XpoCustomerQueryService(
         string Type,
         string? SukuNimi,
         string? KatuOsoite,
+        string? PostiNumero,
         string? PostiToimiPaikka,
         string? Email,
         string? Gsm,
-        string? Puhelin);
+        string? Puhelin,
+        string? Maa,
+        string? LangCode,
+        string? ToimiAla,
+        string? TyoPaikka,
+        int? BruttoTulot,
+        bool? EmailKayttoSallittu,
+        bool? PuhNoKayttoSallittu,
+        bool? Suoramarkkinointikielto);
+        // NOTE: Asiakas.InfoMessage is XPO-non-persistent (computed from
+        // related ASMA flags) — SelectData rejects it. If we want the
+        // banner back, derive it on the fly from the relations rather
+        // than projecting it as a column.
 
-    private readonly record struct PersonRow(string? EtuNimi, string? SukuNimi);
+    private readonly record struct PersonRow(string? EtuNimi, string? SukuNimi, string? Ammatti);
     private readonly record struct CompanyRow(string? CompanyID, string? Name);
     private readonly record struct ContactRow(
         string? EtuNimi,
@@ -481,10 +494,19 @@ public sealed class XpoCustomerQueryService(
             new OperandProperty("OnYritys"),
             new OperandProperty("SukuNimi"),
             new OperandProperty("KatuOsoite"),
+            new OperandProperty("PostiNumero"),
             new OperandProperty("PostiToimiPaikka"),
             new OperandProperty("Email"),
             new OperandProperty("Gsm"),
             new OperandProperty("Puhelin"),
+            new OperandProperty("Maa"),
+            new OperandProperty("LangCode"),
+            new OperandProperty("ToimiAla"),
+            new OperandProperty("TyoPaikka"),
+            new OperandProperty("BruttoTulot"),
+            new OperandProperty("EmailKayttoSallittu"),
+            new OperandProperty("PuhNoKayttoSallittu"),
+            new OperandProperty("Suoramarkkinointikielto"),
         };
         var criteria = new InOperator("AsiakasNumero", asiakasNumbers);
         var rows = session.SelectData(
@@ -507,12 +529,21 @@ public sealed class XpoCustomerQueryService(
 
             result[num.Value] = new AsiakasBaseRow(
                 Type: type,
-                SukuNimi:         row[3] as string,
-                KatuOsoite:       row[4] as string,
-                PostiToimiPaikka: row[5] as string,
-                Email:            row[6] as string,
-                Gsm:              row[7] as string,
-                Puhelin:          row[8] as string);
+                SukuNimi:               row[3]  as string,
+                KatuOsoite:             row[4]  as string,
+                PostiNumero:            row[5]  as string,
+                PostiToimiPaikka:       row[6]  as string,
+                Email:                  row[7]  as string,
+                Gsm:                    row[8]  as string,
+                Puhelin:                row[9]  as string,
+                Maa:                    row[10] as string,
+                LangCode:               row[11] as string,
+                ToimiAla:               row[12] as string,
+                TyoPaikka:              row[13] as string,
+                BruttoTulot:            ToInt(row[14]),
+                EmailKayttoSallittu:    ToBool(row[15]),
+                PuhNoKayttoSallittu:    ToBool(row[16]),
+                Suoramarkkinointikielto: ToBool(row[17]));
         }
         return result;
     }
@@ -525,6 +556,7 @@ public sealed class XpoCustomerQueryService(
             new OperandProperty("AsiakasNumero"),
             new OperandProperty("EtuNimi"),
             new OperandProperty("SukuNimi"),
+            new OperandProperty("Ammatti"),
         };
         var rows = session.SelectData(
             classInfo, props,
@@ -538,7 +570,10 @@ public sealed class XpoCustomerQueryService(
         {
             var num = ToInt(row[0]);
             if (num is null) continue;
-            result[num.Value] = new PersonRow(row[1] as string, row[2] as string);
+            result[num.Value] = new PersonRow(
+                EtuNimi:  row[1] as string,
+                SukuNimi: row[2] as string,
+                Ammatti:  row[3] as string);
         }
         return result;
     }
@@ -614,6 +649,7 @@ public sealed class XpoCustomerQueryService(
         var firstName = NullIfBlank(p.EtuNimi);
         return BuildPersonDto(asiakasNumero, CustomerTypes.Person, b, counts,
             firstName: firstName, lastName: lastName,
+            profession: NullIfBlank(p.Ammatti),
             parentCompanyId: null, parentCompanyName: null);
     }
 
@@ -624,6 +660,7 @@ public sealed class XpoCustomerQueryService(
         var firstName = NullIfBlank(y.EtuNimi);
         return BuildPersonDto(asiakasNumero, CustomerTypes.ContactPerson, b, counts,
             firstName: firstName, lastName: lastName,
+            profession: null,
             parentCompanyId: y.ParentAsiakasNumero?.ToString(CultureInfo.InvariantCulture),
             parentCompanyName: NullIfBlank(y.ParentCompanyName));
     }
@@ -651,7 +688,17 @@ public sealed class XpoCustomerQueryService(
             CompanyName:     displayName,
             BusinessId:      NullIfBlank(c.CompanyID),
             ParentCompanyId: null,
-            ParentCompanyName: null);
+            ParentCompanyName: null,
+            PostalCode:      NullIfBlank(b.PostiNumero),
+            Country:         NullIfBlank(b.Maa),
+            Language:        NullIfBlank(b.LangCode),
+            Profession:      null,
+            Industry:        NullIfBlank(b.ToimiAla),
+            Workplace:       null,
+            Income:          b.BruttoTulot,
+            EmailMarketingAllowed:    b.EmailKayttoSallittu,
+            PhoneMarketingAllowed:    b.PuhNoKayttoSallittu,
+            DirectMarketingForbidden: b.Suoramarkkinointikielto);
     }
 
     /// <summary>
@@ -665,12 +712,14 @@ public sealed class XpoCustomerQueryService(
     {
         return BuildPersonDto(asiakasNumero, b.Type, b, counts,
             firstName: null, lastName: NullIfBlank(b.SukuNimi),
+            profession: null,
             parentCompanyId: null, parentCompanyName: null);
     }
 
     private static CustomerDto BuildPersonDto(int asiakasNumero, string type, AsiakasBaseRow b,
                                                Dictionary<int, Counts> counts,
                                                string? firstName, string? lastName,
+                                               string? profession,
                                                string? parentCompanyId, string? parentCompanyName)
     {
         var snapshot = counts.GetValueOrDefault(asiakasNumero);
@@ -693,7 +742,17 @@ public sealed class XpoCustomerQueryService(
             CompanyName: null,
             BusinessId:  null,
             ParentCompanyId:   parentCompanyId,
-            ParentCompanyName: parentCompanyName);
+            ParentCompanyName: parentCompanyName,
+            PostalCode:      NullIfBlank(b.PostiNumero),
+            Country:         NullIfBlank(b.Maa),
+            Language:        NullIfBlank(b.LangCode),
+            Profession:      profession,
+            Industry:        NullIfBlank(b.ToimiAla),
+            Workplace:       NullIfBlank(b.TyoPaikka),
+            Income:          b.BruttoTulot,
+            EmailMarketingAllowed:    b.EmailKayttoSallittu,
+            PhoneMarketingAllowed:    b.PuhNoKayttoSallittu,
+            DirectMarketingForbidden: b.Suoramarkkinointikielto);
     }
 
     private static string BuildPersonDisplayName(string? lastName, string? firstName, string? fallback)
@@ -744,6 +803,25 @@ public sealed class XpoCustomerQueryService(
         byte b          => b,
         decimal d       => unchecked((int)d),
         IConvertible cv => cv.ToInt32(CultureInfo.InvariantCulture),
+        _               => null,
+    };
+
+    /// <summary>
+    /// Nullable variant of <see cref="ToBoolish"/> for genuine bool columns
+    /// (EmailKayttoSallittu, PuhNoKayttoSallittu, …) — null stays null so
+    /// the wire DTO can distinguish "unset" from "false".
+    /// </summary>
+    private static bool? ToBool(object? value) => value switch
+    {
+        null            => null,
+        bool b          => b,
+        int i           => i != 0,
+        long l          => l != 0,
+        short s         => s != 0,
+        byte by         => by != 0,
+        string str when string.IsNullOrEmpty(str) => null,
+        string str      => str != "0" && !string.Equals(str, "false", StringComparison.OrdinalIgnoreCase),
+        IConvertible cv => cv.ToInt32(CultureInfo.InvariantCulture) != 0,
         _               => null,
     };
 
