@@ -7,6 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import { CurrencyPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { catchError, of, switchMap } from 'rxjs';
 
@@ -27,15 +28,33 @@ interface CountPill {
 }
 
 /**
- * Asiakas-detail (single Henkilo / Yritys / Yhteyshenkilö). Minimal
- * v1: hero with display name, type badge and count pills, plus a
- * contact section with click-to-call and click-to-mail. List actions
- * (open contract, open application) and an action bar are deferred —
- * we'll build them out once the underlying flows exist.
+ * Asiakas-detail (single Henkilo / Yritys / Yhteyshenkilö). Layout
+ * mirrors the canonical XAF DetailView captured by the
+ * `--xaf-fields xVasu.Data.Asma.Asiakas` reflect dump:
+ *
+ *   - Hero / type badge / optional tag
+ *   - Count pills (active relations)
+ *   - Yhteystiedot   (Asiakas base — KatuOsoite, PostiNumero,
+ *                     PostiToimiPaikka, Maa, Puhelin/Gsm, Email)
+ *   - Yritys/Yhteyshenkilö-spesifi kortti (Y-tunnus / parent yritys)
+ *   - Henkilötiedot   (Henkilö-only — Ammatti, ToimiAla, TyoPaikka,
+ *                     BruttoTulot)
+ *   - Asetukset       (kieli + markkinointi-suostumukset, kaikki
+ *                     tyypit)
+ *
+ * Action bar (PikaVaraus, sendSMS, …) is intentionally still missing —
+ * those need backend endpoints. tel:/mailto: links carry the immediate
+ * mobile use case until then.
+ *
+ * PII deliberately left off the wire: PersonID (sotu), DOB, Age.
+ *
+ * Asiakas.InfoMessage (Henkilo's red-banner appearance rule) is XPO
+ * non-persistent so SelectData can't project it. The banner is on
+ * hold until we derive it from the related ASMA flags.
  */
 @Component({
   selector: 'app-customer-detail',
-  imports: [RouterLink],
+  imports: [RouterLink, CurrencyPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <main class="detail">
@@ -81,12 +100,18 @@ interface CountPill {
             <h2 class="card-title">Yhteystiedot</h2>
             <dl class="kv">
               @if (c.primaryAddress) {
-                <dt>Osoite</dt>
+                <dt>Katuosoite</dt>
                 <dd>{{ c.primaryAddress }}</dd>
               }
-              @if (c.city) {
-                <dt>Kunta</dt>
-                <dd>{{ c.city }}</dd>
+              @if (c.postalCode || c.city) {
+                <dt>Postitoimipaikka</dt>
+                <dd>
+                  @if (c.postalCode) { {{ c.postalCode }} } {{ c.city || '' }}
+                </dd>
+              }
+              @if (c.country) {
+                <dt>Maa</dt>
+                <dd>{{ c.country }}</dd>
               }
               @if (c.phone) {
                 <dt>Puhelin</dt>
@@ -96,7 +121,7 @@ interface CountPill {
                 <dt>Sähköposti</dt>
                 <dd><a [href]="'mailto:' + c.email">{{ c.email }}</a></dd>
               }
-              @if (!c.primaryAddress && !c.city && !c.phone && !c.email) {
+              @if (!c.primaryAddress && !c.city && !c.postalCode && !c.country && !c.phone && !c.email) {
                 <dt>—</dt>
                 <dd>Ei tallennettuja yhteystietoja</dd>
               }
@@ -109,6 +134,10 @@ interface CountPill {
               <dl class="kv">
                 <dt>Y-tunnus</dt>
                 <dd>{{ c.businessId || '—' }}</dd>
+                @if (c.industry) {
+                  <dt>Toimiala</dt>
+                  <dd>{{ c.industry }}</dd>
+                }
               </dl>
             </section>
           } @else if (c.type === 'contact-person') {
@@ -124,6 +153,52 @@ interface CountPill {
                   </dd>
                 } @else {
                   <dd>{{ c.parentCompanyName || '—' }}</dd>
+                }
+              </dl>
+            </section>
+          } @else if (c.type === 'person' && hasPersonDetails(c)) {
+            <section class="card">
+              <h2 class="card-title">Henkilötiedot</h2>
+              <dl class="kv">
+                @if (c.profession) {
+                  <dt>Ammatti</dt>
+                  <dd>{{ c.profession }}</dd>
+                }
+                @if (c.industry) {
+                  <dt>Toimiala</dt>
+                  <dd>{{ c.industry }}</dd>
+                }
+                @if (c.workplace) {
+                  <dt>Työpaikka</dt>
+                  <dd>{{ c.workplace }}</dd>
+                }
+                @if (c.income !== undefined && c.income !== null) {
+                  <dt>Bruttotulot</dt>
+                  <dd>{{ c.income | currency:'EUR':'symbol':'1.0-0' }}</dd>
+                }
+              </dl>
+            </section>
+          }
+
+          @if (hasSettings(c)) {
+            <section class="card">
+              <h2 class="card-title">Asetukset</h2>
+              <dl class="kv">
+                @if (c.language) {
+                  <dt>Viestintä-kieli</dt>
+                  <dd>{{ languageLabel(c.language) }}</dd>
+                }
+                @if (c.emailMarketingAllowed !== undefined) {
+                  <dt>Sähköpostin käyttö</dt>
+                  <dd>{{ c.emailMarketingAllowed ? 'Sallittu' : 'Ei sallittu' }}</dd>
+                }
+                @if (c.phoneMarketingAllowed !== undefined) {
+                  <dt>Puhelinnumeron käyttö</dt>
+                  <dd>{{ c.phoneMarketingAllowed ? 'Sallittu' : 'Ei sallittu' }}</dd>
+                }
+                @if (c.directMarketingForbidden !== undefined) {
+                  <dt>Suoramarkkinointi</dt>
+                  <dd>{{ c.directMarketingForbidden ? 'Kielletty' : 'Sallittu' }}</dd>
                 }
               </dl>
             </section>
@@ -192,5 +267,28 @@ export class CustomerDetailComponent {
   // helper is retained for readability/extension.
   protected hasAnyRelation(c: Customer): boolean {
     return totalCount(c.counts) > 0;
+  }
+
+  /** True when at least one person-only employment field is populated. */
+  protected hasPersonDetails(c: Customer): boolean {
+    return !!c.profession || !!c.industry || !!c.workplace
+        || (c.income !== undefined && c.income !== null);
+  }
+
+  /** True when any consent / language field is populated. */
+  protected hasSettings(c: Customer): boolean {
+    return !!c.language
+        || c.emailMarketingAllowed !== undefined
+        || c.phoneMarketingAllowed !== undefined
+        || c.directMarketingForbidden !== undefined;
+  }
+
+  /** Human-readable label for the LangCode wire value. */
+  protected languageLabel(code: string): string {
+    const c = code.toLowerCase();
+    if (c === 'fi') return 'Suomi';
+    if (c === 'sv') return 'Svenska';
+    if (c === 'en') return 'English';
+    return code;
   }
 }

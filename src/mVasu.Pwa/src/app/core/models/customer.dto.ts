@@ -64,6 +64,26 @@ interface BaseCustomer {
   readonly tag?: CustomerTag;
   readonly phone?: string;
   readonly email?: string;
+
+  // Canonical detail-view fields. The list endpoint leaves these undefined;
+  // GetById fills them in. Names mirror Asiakas Model.xafml:
+  //   PostiNumero, Maa, LangCode, ToimiAla, TyoPaikka, BruttoTulot,
+  //   EmailKayttoSallittu, PuhNoKayttoSallittu, Suoramarkkinointikielto,
+  //   InfoMessage. PII (PersonID/SSN/DOB/Age) is deliberately not on the
+  //   wire.
+  readonly postalCode?: string;
+  readonly country?: string;
+  readonly language?: string;
+  readonly industry?: string;
+  /** Henkilö-only — Henkilo.Ammatti. */
+  readonly profession?: string;
+  /** Henkilö-only — Asiakas.TyoPaikka. */
+  readonly workplace?: string;
+  /** Asiakas.BruttoTulot — bruttotulot €/vuosi. */
+  readonly income?: number;
+  readonly emailMarketingAllowed?: boolean;
+  readonly phoneMarketingAllowed?: boolean;
+  readonly directMarketingForbidden?: boolean;
 }
 
 export interface PersonCustomer extends BaseCustomer {
