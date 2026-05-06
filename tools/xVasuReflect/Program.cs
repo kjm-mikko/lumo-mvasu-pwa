@@ -26,6 +26,14 @@ if (typeNames[0] == "--find")
     return 0;
 }
 
+if (typeNames[0] == "--methods")
+{
+    DumpMethods(
+        typeNames.Length > 1 ? typeNames[1] : "DevExpress.Xpo.XPDataView",
+        typeNames.Length > 2 ? typeNames[2] : null);
+    return 0;
+}
+
 foreach (var name in typeNames)
 {
     DumpType(name);
@@ -154,3 +162,23 @@ static string RenderType(Type t)
 }
 
 static string Truncate(string s, int max) => s.Length <= max ? s : s[..(max - 1)] + "…";
+
+static void DumpMethods(string fullName, string? methodFilter)
+{
+    var type = ResolveType(fullName);
+    if (type is null)
+    {
+        Console.WriteLine($"# {fullName} — NOT FOUND");
+        return;
+    }
+    Console.WriteLine($"# {type.FullName} methods" + (methodFilter is null ? "" : $" (filter: {methodFilter})"));
+    var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+        .Where(m => methodFilter is null || string.Equals(m.Name, methodFilter, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(m => m.Name)
+        .ThenBy(m => m.GetParameters().Length);
+    foreach (var m in methods)
+    {
+        var ps = string.Join(", ", m.GetParameters().Select(p => $"{RenderType(p.ParameterType)} {p.Name}"));
+        Console.WriteLine($"  {m.Name}({ps}) -> {RenderType(m.ReturnType)}");
+    }
+}

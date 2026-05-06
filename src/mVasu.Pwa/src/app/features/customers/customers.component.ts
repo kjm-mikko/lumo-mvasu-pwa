@@ -148,6 +148,12 @@ interface CountPill {
           (onValueChanged)="onValue($event)"
           [elementAttr]="{ 'aria-label': 'Hae asiakkaita' }"
         ></dx-text-box>
+        @if (loading()) {
+          <div class="search-loading" aria-live="polite" aria-busy="true">
+            <i class="dx-icon dx-icon-clock" aria-hidden="true"></i>
+            <span>Haetaan asiakkaita…</span>
+          </div>
+        }
       </section>
 
       @if (filtersActive()) {
@@ -185,37 +191,21 @@ interface CountPill {
         </section>
       }
 
-      @if (debouncedQuery().length === 0 && !filtersActive() && recentCustomers().length > 0) {
-        <section class="recent">
-          <h2 class="qs-section">Viimeksi avatut</h2>
-          <dx-list
-            class="lumo-customers-list"
-            [dataSource]="recentData()"
-            keyExpr="id"
-            itemTemplate="row"
-            (onItemClick)="onRowClick($event)"
-          >
-            <div *dxTemplate="let c of 'row'" class="customer-row">
-              <span class="avatar" [attr.data-type]="c.type">{{ c.initials }}</span>
-              <div class="customer-info">
-                <span class="customer-name">{{ c.displayName }}</span>
-                <span class="customer-secondary">{{ secondaryLine(c) }}</span>
-              </div>
-              <div class="customer-counts">
-                @for (p of pillsFor(c); track p.key) {
-                  <span class="count-pill" [attr.data-tone]="p.tone" [title]="p.label">
-                    <i class="dx-icon dx-icon-{{ p.icon }}" aria-hidden="true"></i>
-                    {{ p.value }}
-                  </span>
-                }
-                @if (pillsFor(c).length === 0) {
-                  <span class="count-empty" title="Ei aktiivisia liitoksia">—</span>
-                }
-              </div>
-              <i class="customer-chev dx-icon dx-icon-chevronright" aria-hidden="true"></i>
-            </div>
-          </dx-list>
-        </section>
+      @if (loading() && customers().length === 0) {
+        <!-- Initial-load skeleton — search-bar shows the inline spinner while
+             a list is already on screen, but on first paint we render a light
+             list-shaped placeholder so the user sees the request is in flight. -->
+        <ul class="skeleton-list" aria-hidden="true">
+          @for (_ of [0,1,2,3,4]; track $index) {
+            <li class="skeleton-row">
+              <span class="skeleton-avatar"></span>
+              <span class="skeleton-info">
+                <span class="skeleton-line skeleton-line--name"></span>
+                <span class="skeleton-line skeleton-line--sub"></span>
+              </span>
+            </li>
+          }
+        </ul>
       } @else if (customers().length === 0) {
         <div class="empty">
           <p class="empty-title">Ei osumia</p>
@@ -392,11 +382,6 @@ export class CustomersComponent {
   );
 
   protected readonly customersData = computed<Customer[]>(() => [...this.customers()]);
-
-  protected readonly recentCustomers = computed<ReadonlyArray<Customer>>(() =>
-    this.customersService.recentCustomers(),
-  );
-  protected readonly recentData = computed<Customer[]>(() => [...this.recentCustomers()]);
 
   protected readonly resultCount = computed<number | null>(() => {
     const q = this.debouncedQuery();
