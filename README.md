@@ -16,21 +16,32 @@ Yksityiskohtaiset dokumentit:
 
 ## Pikaopas
 
+Suositus: aja koko stack yhdellä komennolla .NET Aspire -orkestroinnilla.
+
 ```powershell
-# Backend
+# Yhden komennon dev-startup — käynnistää API:n ja PWA:n,
+# avaa Aspire-dashboardin osoitteeseen https://localhost:17216
+dotnet run --project src/mVasu.AppHost
+```
+
+Vanhat erilliskomennot toimivat edelleen (esim. jos haluat ajaa vain
+backendin testaukseen):
+
+```powershell
+# Backend yksin
 dotnet restore Lumo.mVasu.slnx
 dotnet build Lumo.mVasu.slnx
 dotnet watch run --project src/mVasu.Api    # https://localhost:7216
 
 # Tests
-dotnet test Lumo.mVasu.slnx                  # 34 integration tests, no DB needed
+dotnet test Lumo.mVasu.slnx                  # 80 integration tests, no DB needed
 
-# PWA
+# PWA yksin
 npm install --prefix src/mVasu.Pwa
 npm start --prefix src/mVasu.Pwa             # https://localhost:4200
 ```
 
-API käynnistyy `https://localhost:7216`:lle, Scalar UI `/scalar/v1`-polulla. PWA käynnistyy `https://localhost:4200`-osoitteessa MSAL-authilla Lumo Entra ID -tenantia vasten.
+API käynnistyy `https://localhost:7216`:lle, Scalar UI `/scalar/v1`-polulla. PWA käynnistyy `https://localhost:4200`-osoitteessa MSAL-authilla Lumo Entra ID -tenantia vasten. Aspire-dashboard koostaa molempien lokit, OpenTelemetry-tracingit ja resurssien tilan yhteen näkymään.
 
 Ennen ensimmäistä ajoa: `dotnet dev-certs https --trust`, user secrets connection-stringiin, Azure DevOps credprovider xVasu-paketteja varten — yksityiskohdat [`docs/local-development.md`](docs/local-development.md):ssa.
 

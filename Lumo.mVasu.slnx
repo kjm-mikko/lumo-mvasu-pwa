@@ -2,6 +2,8 @@
   <Folder Name="/src/">
     <Project Path="src/mVasu.Api.Contracts/mVasu.Api.Contracts.csproj" />
     <Project Path="src/mVasu.Api/mVasu.Api.csproj" />
+    <Project Path="src/mVasu.AppHost/mVasu.AppHost.csproj" />
+    <Project Path="src/mVasu.ServiceDefaults/mVasu.ServiceDefaults.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/mVasu.Api.Tests/mVasu.Api.Tests.csproj" />

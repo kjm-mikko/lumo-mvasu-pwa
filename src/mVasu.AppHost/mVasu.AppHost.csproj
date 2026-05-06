@@ -1,0 +1,24 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.2.4">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>ade2e0c6-3fdc-4d3a-9a6b-8e7d6e6c0c11</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- AddNpmApp lives in Aspire.Hosting.JavaScript (replaces the legacy
+         Aspire.Hosting.NodeJs package starting in 13.0). The SDK above
+         pulls in the core hosting packages automatically. -->
+    <PackageReference Include="Aspire.Hosting.JavaScript" Version="13.2.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Orchestrated services. PWA is wired in via AddNpmApp (Node-based,
+         no project ref needed) so only the API/.NET-side projects appear here. -->
+    <ProjectReference Include="..\mVasu.Api\mVasu.Api.csproj" />
+  </ItemGroup>
+
+</Project>
