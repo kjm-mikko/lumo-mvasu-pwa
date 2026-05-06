@@ -69,6 +69,11 @@ export const routes: Routes = [
           import('./features/customers/customers.component').then(m => m.CustomersComponent),
       },
       {
+        path: 'customers/:id',
+        loadComponent: () =>
+          import('./features/customers/customer-detail.component').then(m => m.CustomerDetailComponent),
+      },
+      {
         path: 'home-hub',
         data: { reuse: true },
         loadComponent: () =>

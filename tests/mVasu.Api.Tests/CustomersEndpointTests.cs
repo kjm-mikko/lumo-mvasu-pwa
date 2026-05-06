@@ -179,6 +179,82 @@ public class CustomersEndpointTests : IClassFixture<AuthenticatedWebApplicationF
         Assert.Equal("2345678-9",           body.Items[1].BusinessId);
     }
 
+    // -- GET /api/customers/{id} ----------------------------------------------
+
+    [Fact]
+    public async Task GetById_WithoutToken_Returns401()
+    {
+        var client = WithMock(new RecordingService()).CreateClient();
+
+        var response = await client.GetAsync("/api/customers/123");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetById_NotFound_Returns404()
+    {
+        var mock = new RecordingService { DetailResult = null };
+        var client = WithMock(mock).CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "mikko.nieminen@kojamo.fi");
+
+        var response = await client.GetAsync("/api/customers/9999");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(9999, mock.LastDetailId);
+    }
+
+    [Fact]
+    public async Task GetById_Found_Returns200WithDto()
+    {
+        var personRow = new CustomerDto(
+            Id: "42",
+            Type: CustomerTypes.Person,
+            DisplayName: "Aalto, Eero",
+            Initials: "AE",
+            Counts: new CustomerCountsDto(0, 0, 1, 0, 0),
+            PrimaryAddress: "Mannerheimintie 12 A 4",
+            City: "Helsinki",
+            Tag: null,
+            Phone: null,
+            Email: null,
+            FirstName: "Eero",
+            LastName: "Aalto",
+            CompanyName: null,
+            BusinessId: null,
+            ParentCompanyId: null,
+            ParentCompanyName: null);
+        var mock = new RecordingService { DetailResult = personRow };
+        var client = WithMock(mock).CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "mikko.nieminen@kojamo.fi");
+
+        var response = await client.GetAsync("/api/customers/42");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<CustomerDto>();
+        Assert.NotNull(body);
+        Assert.Equal("42",      body!.Id);
+        Assert.Equal("Aalto, Eero", body.DisplayName);
+        Assert.Equal(42, mock.LastDetailId);
+    }
+
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("0.5")]
+    public async Task GetById_NonIntegerId_Returns404(string id)
+    {
+        var mock = new RecordingService();
+        var client = WithMock(mock).CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "mikko.nieminen@kojamo.fi");
+
+        var response = await client.GetAsync($"/api/customers/{id}");
+
+        // The {id:int} route constraint causes the endpoint to be unmatched,
+        // which Minimal API returns as 404 Not Found rather than 400.
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Null(mock.LastDetailId);
+    }
+
     private static CustomersResponseDto Empty() =>
         new(Array.Empty<CustomerDto>(), 0);
 
@@ -196,7 +272,10 @@ public class CustomersEndpointTests : IClassFixture<AuthenticatedWebApplicationF
         public CustomersResponseDto Result { get; set; } =
             new(Array.Empty<CustomerDto>(), 0);
 
+        public CustomerDto? DetailResult { get; set; }
+
         public CustomerQueryParameters? LastQuery { get; private set; }
+        public int? LastDetailId { get; private set; }
 
         public Task<CustomersResponseDto> ListAsync(
             ClaimsPrincipal principal,
@@ -205,6 +284,15 @@ public class CustomersEndpointTests : IClassFixture<AuthenticatedWebApplicationF
         {
             LastQuery = query;
             return Task.FromResult(Result);
+        }
+
+        public Task<CustomerDto?> GetAsync(
+            ClaimsPrincipal principal,
+            int asiakasNumero,
+            CancellationToken cancellationToken = default)
+        {
+            LastDetailId = asiakasNumero;
+            return Task.FromResult(DetailResult);
         }
     }
 }

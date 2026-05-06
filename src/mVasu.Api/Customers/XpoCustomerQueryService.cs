@@ -163,6 +163,61 @@ public sealed class XpoCustomerQueryService(
         }
     }
 
+    public Task<CustomerDto?> GetAsync(
+        ClaimsPrincipal principal,
+        int asiakasNumero,
+        CancellationToken cancellationToken = default)
+    {
+        var (user, os) = ResolveUser(principal);
+        if (user is null || os is null)
+        {
+            return Task.FromResult<CustomerDto?>(null);
+        }
+
+        try
+        {
+            var session = ((XPObjectSpace)os).Session;
+            var ids = new object[] { asiakasNumero };
+
+            // Same row-projection strategy as ListAsync: never hydrate an
+            // Asiakas entity, so dangling FK references on Henkilo.LastOne
+            // and friends can't take the response down.
+            var baseRows    = LoadAsiakasBaseRows(session, ids);
+            if (!baseRows.TryGetValue(asiakasNumero, out var baseRow))
+            {
+                // No row visible to this user (either deleted or filtered
+                // by PermissionPolicy). Return 404 to the caller.
+                return Task.FromResult<CustomerDto?>(null);
+            }
+
+            var personRows  = LoadHenkiloRows(session, ids);
+            var companyRows = LoadYritysRows(session, ids);
+            var contactRows = LoadYhteyshenkiloRows(session, ids);
+            var counts      = LookupCounts(session, ids);
+
+            CustomerDto dto = baseRow.Type switch
+            {
+                CustomerTypes.Person        when personRows.TryGetValue(asiakasNumero, out var p) => MapPerson(asiakasNumero, baseRow, p, counts),
+                CustomerTypes.Company       when companyRows.TryGetValue(asiakasNumero, out var c) => MapCompany(asiakasNumero, baseRow, c, counts),
+                CustomerTypes.ContactPerson when contactRows.TryGetValue(asiakasNumero, out var y) => MapContact(asiakasNumero, baseRow, y, counts),
+                _ => MapFallback(asiakasNumero, baseRow, counts),
+            };
+
+            return Task.FromResult<CustomerDto?>(dto);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Customer detail load failed for AsiakasNumero {AsiakasNumero}, user {Email}",
+                asiakasNumero, user.UserName);
+            return Task.FromResult<CustomerDto?>(null);
+        }
+        finally
+        {
+            os.Dispose();
+        }
+    }
+
     // -- criteria ---------------------------------------------------------
 
     private static CriteriaOperator? BuildCriteria(CustomerQueryParameters query)

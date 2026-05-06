@@ -17,6 +17,19 @@ public interface ICustomerQueryService
         ClaimsPrincipal principal,
         CustomerQueryParameters query,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the full row for a single Asiakas (Henkilo / Yritys /
+    /// Yhteyshenkilo) by AsiakasNumero, or null if the row doesn't
+    /// exist or the caller lacks permission to see it. The wire shape
+    /// reuses <see cref="CustomerDto"/> — the detail view today shows
+    /// the same fields the list row carries; specialised fields will
+    /// land in a dedicated DetailDto when we need them.
+    /// </summary>
+    Task<CustomerDto?> GetAsync(
+        ClaimsPrincipal principal,
+        int asiakasNumero,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
