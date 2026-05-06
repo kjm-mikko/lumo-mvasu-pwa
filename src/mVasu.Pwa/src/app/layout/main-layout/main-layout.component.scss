@@ -130,6 +130,16 @@
     flex: 0 0 56px;
     border-right: 1px solid var(--lumo-border);
     background: var(--lumo-surface);
+
+    // Pin the rail so it stays in view while the customer / task / etc.
+    // list scrolls beside it. align-self prevents the flex parent from
+    // stretching the sidebar's height to match the (potentially very
+    // tall) sibling content.
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100dvh;
+    overflow-y: auto;
   }
 
   .tabbar {

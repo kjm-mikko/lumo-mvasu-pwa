@@ -24,6 +24,20 @@ var builder = DistributedApplication.CreateBuilder(args);
 var api = builder.AddProject<Projects.mVasu_Api>("api")
     .WithHttpHealthCheck("/api/health");
 
+// Dev impersonation override (EmailResolver). The dev-start.ps1 script
+// sets `Development__ImpersonateEmail` on its own process when the
+// caller passes `-ImpersonateEmail …`; Aspire children don't inherit
+// arbitrary env vars from AppHost by default, so we pass the value
+// through explicitly. Empty/absent on this side is a no-op — the API
+// only acts on the value when ASPNETCORE_ENVIRONMENT == Development
+// AND the value is non-empty.
+var impersonate = builder.Configuration["Development:ImpersonateEmail"]
+    ?? Environment.GetEnvironmentVariable("Development__ImpersonateEmail");
+if (!string.IsNullOrWhiteSpace(impersonate))
+{
+    api = api.WithEnvironment("Development__ImpersonateEmail", impersonate);
+}
+
 // -- mVasu.Pwa (Angular) ---------------------------------------------------
 
 // `AddNodeApp` + `WithNpm()` + `WithRunScript("start")` is the Aspire 13

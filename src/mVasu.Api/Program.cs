@@ -66,6 +66,11 @@ builder.Services.AddScoped<IUserSettingsService, XpoUserSettingsService>();
 builder.Services.AddScoped<ITiskilistaQueryService, TiskilistaQueryService>();
 builder.Services.AddScoped<ITaskQueryService, TaskQueryService>();
 builder.Services.AddScoped<ICustomerQueryService, XpoCustomerQueryService>();
+// Singleton — pure logic over the resolved xVasuSecuritySystemUser, no
+// per-request state. Walks PermissionPolicy roles defensively to nullify
+// customer DTO fields the caller cannot read (B2 cut, see
+// CustomerFieldAccessPolicy XML doc for the rationale).
+builder.Services.AddSingleton<CustomerFieldAccessPolicy>();
 // Singleton — derived from xVasu.Module attributes that only change on
 // NuGet upgrade. No DB / DI dependencies, safe to construct at boot.
 builder.Services.AddSingleton<CustomerMetadataService>();
@@ -87,6 +92,29 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Development-only user impersonation. When the configuration entry
+// `Development:ImpersonateEmail` is set in a Development environment,
+// the EmailResolver returns that email for every authenticated request
+// regardless of the principal's claims — used to log in via the normal
+// Azure AD flow and then test the back-end as a different mVasu user
+// (different roles, different PermissionPolicy). Production environments
+// are filtered out at the env check; the setter does nothing when env
+// isn't Development.
+if (app.Environment.IsDevelopment())
+{
+    var impersonate = app.Configuration["Development:ImpersonateEmail"];
+    if (!string.IsNullOrWhiteSpace(impersonate))
+    {
+        EmailResolver.SetDevelopmentImpersonation(impersonate);
+        // Surface this loudly. A silent impersonation that survives a
+        // forgotten config edit is exactly the bug we don't want.
+        app.Logger.LogWarning(
+            "DEV IMPERSONATION ACTIVE: every authenticated request will resolve to {Email}. " +
+            "Disable by clearing Development:ImpersonateEmail or unsetting the env var Development__ImpersonateEmail.",
+            impersonate);
+    }
+}
 
 var startedAt = DateTimeOffset.UtcNow;
 var version = Assembly.GetExecutingAssembly()
@@ -510,7 +538,8 @@ app.MapGet("/api/customers", async (
     .WithSummary("Lists Asiakkaat (Henkilö / Yritys / Yhteyshenkilö) sorted fi-FI " +
                  "by displayName. Projects from xVasu.Data.Asma.Asiakas with related-" +
                  "entity counts (Hakemus, SopimusVaraus, Sopimus, Tutustumiskäynti). " +
-                 "Visibility scopes via XPO PermissionPolicy on the user's session.")
+                 "Field-level read access enforced defensively against the caller's " +
+                 "PermissionPolicy roles — see CustomerFieldAccessPolicy.")
     .RequireAuthorization(AccessAsUserPolicy);
 
 app.MapGet("/api/customers/{id:int}", async (
@@ -524,7 +553,9 @@ app.MapGet("/api/customers/{id:int}", async (
     })
     .WithName("GetCustomerById")
     .WithSummary("Returns the full Asiakas row by AsiakasNumero. 404 when " +
-                 "the row doesn't exist or the caller lacks XPO permission to see it.")
+                 "the row doesn't exist or the caller lacks XPO permission to see it. " +
+                 "Field-level read access is enforced via CustomerFieldAccessPolicy " +
+                 "— denied properties come back null in the DTO.")
     .RequireAuthorization(AccessAsUserPolicy);
 
 app.MapGet("/api/customers/metadata", (CustomerMetadataService metadata) =>

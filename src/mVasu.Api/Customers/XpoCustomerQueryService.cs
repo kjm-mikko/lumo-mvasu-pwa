@@ -42,6 +42,7 @@ namespace mVasu.Api.Customers;
 /// </remarks>
 public sealed class XpoCustomerQueryService(
     IObjectSpaceProvider objectSpaceProvider,
+    CustomerFieldAccessPolicy fieldAccessPolicy,
     ILogger<XpoCustomerQueryService> logger) : ICustomerQueryService
 {
     /// <summary>
@@ -62,7 +63,7 @@ public sealed class XpoCustomerQueryService(
         CustomerQueryParameters query,
         CancellationToken cancellationToken = default)
     {
-        var (user, os) = ResolveUser(principal);
+        var (user, os, access) = ResolveUser(principal);
         if (user is null || os is null)
         {
             return Task.FromResult(Empty());
@@ -125,10 +126,10 @@ public sealed class XpoCustomerQueryService(
                 {
                     dto = baseRow.Type switch
                     {
-                        CustomerTypes.Person        when personRows.TryGetValue(num, out var p) => MapPerson(num, baseRow, p, counts),
-                        CustomerTypes.Company       when companyRows.TryGetValue(num, out var c) => MapCompany(num, baseRow, c, counts),
-                        CustomerTypes.ContactPerson when contactRows.TryGetValue(num, out var y) => MapContact(num, baseRow, y, counts),
-                        _ => MapFallback(num, baseRow, counts),
+                        CustomerTypes.Person        when personRows.TryGetValue(num, out var p) => MapPerson(num, baseRow, p, counts, access),
+                        CustomerTypes.Company       when companyRows.TryGetValue(num, out var c) => MapCompany(num, baseRow, c, counts, access),
+                        CustomerTypes.ContactPerson when contactRows.TryGetValue(num, out var y) => MapContact(num, baseRow, y, counts, access),
+                        _ => MapFallback(num, baseRow, counts, access),
                     };
                 }
                 catch (Exception ex)
@@ -168,7 +169,7 @@ public sealed class XpoCustomerQueryService(
         int asiakasNumero,
         CancellationToken cancellationToken = default)
     {
-        var (user, os) = ResolveUser(principal);
+        var (user, os, access) = ResolveUser(principal);
         if (user is null || os is null)
         {
             return Task.FromResult<CustomerDto?>(null);
@@ -197,10 +198,10 @@ public sealed class XpoCustomerQueryService(
 
             CustomerDto dto = baseRow.Type switch
             {
-                CustomerTypes.Person        when personRows.TryGetValue(asiakasNumero, out var p) => MapPerson(asiakasNumero, baseRow, p, counts),
-                CustomerTypes.Company       when companyRows.TryGetValue(asiakasNumero, out var c) => MapCompany(asiakasNumero, baseRow, c, counts),
-                CustomerTypes.ContactPerson when contactRows.TryGetValue(asiakasNumero, out var y) => MapContact(asiakasNumero, baseRow, y, counts),
-                _ => MapFallback(asiakasNumero, baseRow, counts),
+                CustomerTypes.Person        when personRows.TryGetValue(asiakasNumero, out var p) => MapPerson(asiakasNumero, baseRow, p, counts, access),
+                CustomerTypes.Company       when companyRows.TryGetValue(asiakasNumero, out var c) => MapCompany(asiakasNumero, baseRow, c, counts, access),
+                CustomerTypes.ContactPerson when contactRows.TryGetValue(asiakasNumero, out var y) => MapContact(asiakasNumero, baseRow, y, counts, access),
+                _ => MapFallback(asiakasNumero, baseRow, counts, access),
             };
 
             return Task.FromResult<CustomerDto?>(dto);
@@ -643,22 +644,28 @@ public sealed class XpoCustomerQueryService(
     // -- mapping ----------------------------------------------------------
 
     private static CustomerDto MapPerson(int asiakasNumero, AsiakasBaseRow b, PersonRow p,
-                                          Dictionary<int, Counts> counts)
+                                          Dictionary<int, Counts> counts,
+                                          CustomerFieldAccessSnapshot access)
     {
-        var lastName = NullIfBlank(p.SukuNimi) ?? NullIfBlank(b.SukuNimi);
-        var firstName = NullIfBlank(p.EtuNimi);
-        return BuildPersonDto(asiakasNumero, CustomerTypes.Person, b, counts,
+        var clrType = typeof(Henkilo);
+        var lastName = NullIfBlank(Allow(access, clrType, "SukuNimi", p.SukuNimi))
+                       ?? NullIfBlank(Allow(access, typeof(Asiakas), "SukuNimi", b.SukuNimi));
+        var firstName = NullIfBlank(Allow(access, clrType, "EtuNimi", p.EtuNimi));
+        return BuildPersonDto(asiakasNumero, CustomerTypes.Person, b, counts, access, clrType,
             firstName: firstName, lastName: lastName,
-            profession: NullIfBlank(p.Ammatti),
+            profession: NullIfBlank(Allow(access, clrType, "Ammatti", p.Ammatti)),
             parentCompanyId: null, parentCompanyName: null);
     }
 
     private static CustomerDto MapContact(int asiakasNumero, AsiakasBaseRow b, ContactRow y,
-                                           Dictionary<int, Counts> counts)
+                                           Dictionary<int, Counts> counts,
+                                           CustomerFieldAccessSnapshot access)
     {
-        var lastName = NullIfBlank(y.SukuNimi) ?? NullIfBlank(b.SukuNimi);
-        var firstName = NullIfBlank(y.EtuNimi);
-        return BuildPersonDto(asiakasNumero, CustomerTypes.ContactPerson, b, counts,
+        var clrType = typeof(Yhteyshenkilo);
+        var lastName = NullIfBlank(Allow(access, clrType, "SukuNimi", y.SukuNimi))
+                       ?? NullIfBlank(Allow(access, typeof(Asiakas), "SukuNimi", b.SukuNimi));
+        var firstName = NullIfBlank(Allow(access, clrType, "EtuNimi", y.EtuNimi));
+        return BuildPersonDto(asiakasNumero, CustomerTypes.ContactPerson, b, counts, access, clrType,
             firstName: firstName, lastName: lastName,
             profession: null,
             parentCompanyId: y.ParentAsiakasNumero?.ToString(CultureInfo.InvariantCulture),
@@ -666,10 +673,20 @@ public sealed class XpoCustomerQueryService(
     }
 
     private static CustomerDto MapCompany(int asiakasNumero, AsiakasBaseRow b, CompanyRow c,
-                                           Dictionary<int, Counts> counts)
+                                           Dictionary<int, Counts> counts,
+                                           CustomerFieldAccessSnapshot access)
     {
         var snapshot = counts.GetValueOrDefault(asiakasNumero);
-        var displayName = NullIfBlank(c.Name) ?? NullIfBlank(b.SukuNimi) ?? "(nimetön yritys)";
+        var clrType = typeof(Yritys);
+
+        // SukuNimi / Yritysnimi share the underlying column. The display
+        // name needs *some* readable token to avoid degenerate output;
+        // when SukuNimi is denied we still surface "(nimetön yritys)" so
+        // the row is identifiable in the list.
+        var allowedSukuName = Allow(access, clrType, "SukuNimi", c.Name)
+                              ?? Allow(access, typeof(Asiakas), "SukuNimi", b.SukuNimi);
+        var displayName = NullIfBlank(allowedSukuName) ?? "(nimetön yritys)";
+
         return new CustomerDto(
             Id: asiakasNumero.ToString(CultureInfo.InvariantCulture),
             Type: CustomerTypes.Company,
@@ -678,27 +695,28 @@ public sealed class XpoCustomerQueryService(
             Counts: new CustomerCountsDto(
                 snapshot.Applications, snapshot.Reservations,
                 snapshot.Contracts, snapshot.Offers, snapshot.Showings),
-            PrimaryAddress: NullIfBlank(b.KatuOsoite),
-            City:           NullIfBlank(b.PostiToimiPaikka),
+            PrimaryAddress: NullIfBlank(Allow(access, typeof(Asiakas), "KatuOsoite", b.KatuOsoite)),
+            City:           NullIfBlank(Allow(access, typeof(Asiakas), "PostiToimiPaikka", b.PostiToimiPaikka)),
             Tag:            null,
-            Phone:          NullIfBlank(b.Gsm) ?? NullIfBlank(b.Puhelin),
-            Email:          NullIfBlank(b.Email),
+            Phone:          NullIfBlank(Allow(access, typeof(Asiakas), "Gsm",     b.Gsm))
+                            ?? NullIfBlank(Allow(access, typeof(Asiakas), "Puhelin", b.Puhelin)),
+            Email:          NullIfBlank(Allow(access, typeof(Asiakas), "Email", b.Email)),
             FirstName:       null,
             LastName:        null,
             CompanyName:     displayName,
-            BusinessId:      NullIfBlank(c.CompanyID),
+            BusinessId:      NullIfBlank(Allow(access, clrType, "CompanyID", c.CompanyID)),
             ParentCompanyId: null,
             ParentCompanyName: null,
-            PostalCode:      NullIfBlank(b.PostiNumero),
-            Country:         NullIfBlank(b.Maa),
-            Language:        NullIfBlank(b.LangCode),
+            PostalCode:      NullIfBlank(Allow(access, typeof(Asiakas), "PostiNumero", b.PostiNumero)),
+            Country:         NullIfBlank(Allow(access, typeof(Asiakas), "Maa",         b.Maa)),
+            Language:        NullIfBlank(Allow(access, typeof(Asiakas), "LangCode",    b.LangCode)),
             Profession:      null,
-            Industry:        NullIfBlank(b.ToimiAla),
+            Industry:        NullIfBlank(Allow(access, typeof(Asiakas), "ToimiAla", b.ToimiAla)),
             Workplace:       null,
-            Income:          b.BruttoTulot,
-            EmailMarketingAllowed:    b.EmailKayttoSallittu,
-            PhoneMarketingAllowed:    b.PuhNoKayttoSallittu,
-            DirectMarketingForbidden: b.Suoramarkkinointikielto);
+            Income:          Allow(access, typeof(Asiakas), "BruttoTulot",            b.BruttoTulot),
+            EmailMarketingAllowed:    Allow(access, typeof(Asiakas), "EmailKayttoSallittu",     b.EmailKayttoSallittu),
+            PhoneMarketingAllowed:    Allow(access, typeof(Asiakas), "PuhNoKayttoSallittu",     b.PuhNoKayttoSallittu),
+            DirectMarketingForbidden: Allow(access, typeof(Asiakas), "Suoramarkkinointikielto", b.Suoramarkkinointikielto));
     }
 
     /// <summary>
@@ -708,16 +726,27 @@ public sealed class XpoCustomerQueryService(
     /// be present.
     /// </summary>
     private static CustomerDto MapFallback(int asiakasNumero, AsiakasBaseRow b,
-                                            Dictionary<int, Counts> counts)
+                                            Dictionary<int, Counts> counts,
+                                            CustomerFieldAccessSnapshot access)
     {
-        return BuildPersonDto(asiakasNumero, b.Type, b, counts,
-            firstName: null, lastName: NullIfBlank(b.SukuNimi),
+        var clrType = b.Type switch
+        {
+            CustomerTypes.Person        => typeof(Henkilo),
+            CustomerTypes.Company       => typeof(Yritys),
+            CustomerTypes.ContactPerson => typeof(Yhteyshenkilo),
+            _                           => typeof(Asiakas),
+        };
+        return BuildPersonDto(asiakasNumero, b.Type, b, counts, access, clrType,
+            firstName: null,
+            lastName:  NullIfBlank(Allow(access, typeof(Asiakas), "SukuNimi", b.SukuNimi)),
             profession: null,
             parentCompanyId: null, parentCompanyName: null);
     }
 
     private static CustomerDto BuildPersonDto(int asiakasNumero, string type, AsiakasBaseRow b,
                                                Dictionary<int, Counts> counts,
+                                               CustomerFieldAccessSnapshot access,
+                                               Type clrType,
                                                string? firstName, string? lastName,
                                                string? profession,
                                                string? parentCompanyId, string? parentCompanyName)
@@ -732,28 +761,38 @@ public sealed class XpoCustomerQueryService(
             Counts: new CustomerCountsDto(
                 snapshot.Applications, snapshot.Reservations,
                 snapshot.Contracts, snapshot.Offers, snapshot.Showings),
-            PrimaryAddress: NullIfBlank(b.KatuOsoite),
-            City:           NullIfBlank(b.PostiToimiPaikka),
+            PrimaryAddress: NullIfBlank(Allow(access, typeof(Asiakas), "KatuOsoite", b.KatuOsoite)),
+            City:           NullIfBlank(Allow(access, typeof(Asiakas), "PostiToimiPaikka", b.PostiToimiPaikka)),
             Tag:            null,
-            Phone:          NullIfBlank(b.Gsm) ?? NullIfBlank(b.Puhelin),
-            Email:          NullIfBlank(b.Email),
+            Phone:          NullIfBlank(Allow(access, typeof(Asiakas), "Gsm",     b.Gsm))
+                            ?? NullIfBlank(Allow(access, typeof(Asiakas), "Puhelin", b.Puhelin)),
+            Email:          NullIfBlank(Allow(access, typeof(Asiakas), "Email", b.Email)),
             FirstName: firstName,
             LastName:  lastName,
             CompanyName: null,
             BusinessId:  null,
             ParentCompanyId:   parentCompanyId,
             ParentCompanyName: parentCompanyName,
-            PostalCode:      NullIfBlank(b.PostiNumero),
-            Country:         NullIfBlank(b.Maa),
-            Language:        NullIfBlank(b.LangCode),
+            PostalCode:      NullIfBlank(Allow(access, typeof(Asiakas), "PostiNumero", b.PostiNumero)),
+            Country:         NullIfBlank(Allow(access, typeof(Asiakas), "Maa",         b.Maa)),
+            Language:        NullIfBlank(Allow(access, typeof(Asiakas), "LangCode",    b.LangCode)),
             Profession:      profession,
-            Industry:        NullIfBlank(b.ToimiAla),
-            Workplace:       NullIfBlank(b.TyoPaikka),
-            Income:          b.BruttoTulot,
-            EmailMarketingAllowed:    b.EmailKayttoSallittu,
-            PhoneMarketingAllowed:    b.PuhNoKayttoSallittu,
-            DirectMarketingForbidden: b.Suoramarkkinointikielto);
+            Industry:        NullIfBlank(Allow(access, typeof(Asiakas), "ToimiAla", b.ToimiAla)),
+            Workplace:       NullIfBlank(Allow(access, typeof(Asiakas), "TyoPaikka", b.TyoPaikka)),
+            Income:          Allow(access, typeof(Asiakas), "BruttoTulot",                b.BruttoTulot),
+            EmailMarketingAllowed:    Allow(access, typeof(Asiakas), "EmailKayttoSallittu",     b.EmailKayttoSallittu),
+            PhoneMarketingAllowed:    Allow(access, typeof(Asiakas), "PuhNoKayttoSallittu",     b.PuhNoKayttoSallittu),
+            DirectMarketingForbidden: Allow(access, typeof(Asiakas), "Suoramarkkinointikielto", b.Suoramarkkinointikielto));
     }
+
+    /// <summary>
+    /// Returns <paramref name="value"/> when the access snapshot allows
+    /// reading <paramref name="property"/> on <paramref name="clrType"/>;
+    /// the type's default (null for refs / Nullable) otherwise. The
+    /// AllowAll fast-path skips the dictionary lookup entirely.
+    /// </summary>
+    private static T? Allow<T>(CustomerFieldAccessSnapshot access, Type clrType, string property, T? value) =>
+        access.AllAllowed || access.CanRead(clrType, property) ? value : default;
 
     private static string BuildPersonDisplayName(string? lastName, string? firstName, string? fallback)
     {
@@ -848,7 +887,8 @@ public sealed class XpoCustomerQueryService(
     private static CustomersResponseDto Empty() =>
         new(Array.Empty<CustomerDto>(), 0);
 
-    private (xVasuSecuritySystemUser? user, IObjectSpace? os) ResolveUser(ClaimsPrincipal principal)
+    private (xVasuSecuritySystemUser? user, IObjectSpace? os, CustomerFieldAccessSnapshot access)
+        ResolveUser(ClaimsPrincipal principal)
     {
         var os = objectSpaceProvider.CreateObjectSpace();
 
@@ -857,7 +897,7 @@ public sealed class XpoCustomerQueryService(
         {
             logger.LogWarning("Customers request rejected — principal had no resolvable email");
             os.Dispose();
-            return (null, null);
+            return (null, null, CustomerFieldAccessSnapshot.DenyAll);
         }
 
         var variants = EmailResolver.BuildEmailVariants(email);
@@ -866,9 +906,13 @@ public sealed class XpoCustomerQueryService(
         {
             logger.LogInformation("Customers request rejected — user {Email} not provisioned", email);
             os.Dispose();
-            return (null, null);
+            return (null, null, CustomerFieldAccessSnapshot.DenyAll);
         }
 
-        return (resolved, os);
+        // Snapshot is computed once per request from the open object
+        // space — the role walk uses the same XPO Session so any roles
+        // collection that has been lazily loaded reuses connection state.
+        var access = fieldAccessPolicy.Evaluate(resolved);
+        return (resolved, os, access);
     }
 }

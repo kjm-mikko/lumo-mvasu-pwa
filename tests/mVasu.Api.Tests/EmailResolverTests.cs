@@ -3,6 +3,7 @@ using mVasu.Api.Authentication;
 
 namespace mVasu.Api.Tests;
 
+[Collection(EmailResolverCollection.Name)]
 public class EmailResolverTests
 {
     [Fact]

@@ -15,6 +15,7 @@ import {
   combineLatest,
   debounceTime,
   distinctUntilChanged,
+  filter,
   map,
   of,
   startWith,
@@ -48,7 +49,15 @@ interface ToastState {
 }
 const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
 
-const DEBOUNCE_MS = 200;
+const DEBOUNCE_MS = 400;
+
+// Suppress single-character searches — the back-end runs a multi-column
+// LIKE '%q%' across SukuNimi / KatuOsoite / Email / Gsm / Puhelin which is
+// a full table scan without an FTS index. 1-char queries match almost
+// everything and the round trip is wasted; 2+ chars typically narrow the
+// result set down enough to be worth firing. The empty string is special
+// and still loads the unfiltered page.
+const MIN_QUERY_LENGTH = 2;
 
 const TYPE_OPTIONS: ReadonlyArray<{ readonly id: CustomerType; readonly label: string }> = [
   { id: 'person',          label: CUSTOMER_TYPE_LABELS.person },
@@ -403,6 +412,15 @@ export class CustomersComponent {
     ])
       .pipe(
         debounceTime(DEBOUNCE_MS),
+        // Drop searches that are below the min-length threshold so a
+        // single keystroke doesn't fire a heavy LIKE %x% scan. q === ''
+        // (initial / cleared) and q.length >= MIN are both kept; 1-char
+        // queries leave the previous result set on screen until the user
+        // types a second character.
+        filter(([q]) => {
+          const trimmed = q.trim();
+          return trimmed.length === 0 || trimmed.length >= MIN_QUERY_LENGTH;
+        }),
         distinctUntilChanged((a, b) =>
           a[0] === b[0] &&
           a[1].type === b[1].type &&

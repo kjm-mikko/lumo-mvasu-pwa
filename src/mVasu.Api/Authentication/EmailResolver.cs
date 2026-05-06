@@ -13,11 +13,50 @@ public static class EmailResolver
         "kojamo.onmicrosoft.com",
     ];
 
+    /// <summary>
+    /// Process-wide impersonation override populated only in Development
+    /// from the <c>Development:ImpersonateEmail</c> configuration value
+    /// (see <c>Program.cs</c>). When set, every authenticated request
+    /// resolves to this email regardless of the principal's claims —
+    /// used to test as a different mVasu user without re-logging into
+    /// Azure AD locally. Production guard is the env check at startup,
+    /// not this field.
+    /// </summary>
+    private static string? _developmentImpersonation;
+
+    /// <summary>
+    /// Sets the dev-only impersonation email. Caller is responsible for
+    /// gating on <see cref="IHostEnvironment.IsDevelopment"/> and
+    /// surfacing a warning at startup so it's hard to miss when active.
+    /// </summary>
+    public static void SetDevelopmentImpersonation(string? email)
+    {
+        _developmentImpersonation = string.IsNullOrWhiteSpace(email)
+            ? null
+            : email.Trim().ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Returns the currently active development impersonation email, or
+    /// null when impersonation is off. Useful for /api/me-style probes
+    /// that want to surface "you're impersonating X" in their response.
+    /// </summary>
+    public static string? CurrentDevelopmentImpersonation => _developmentImpersonation;
+
     public static string? ResolveEmail(ClaimsPrincipal principal)
     {
         if (principal.Identity?.IsAuthenticated != true)
         {
             return null;
+        }
+
+        // Dev impersonation runs only after the principal has been
+        // authenticated by the standard JWT/Test handler — this keeps
+        // unauthenticated callers on the 401 path. The override itself
+        // is gated to Development at registration time.
+        if (_developmentImpersonation is not null)
+        {
+            return _developmentImpersonation;
         }
 
         var name = principal.Identity.Name?.ToLowerInvariant();

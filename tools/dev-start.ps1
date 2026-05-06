@@ -14,6 +14,7 @@
 #
 #   pwsh tools/dev-start.ps1
 #   pwsh tools/dev-start.ps1 -NoBuild
+#   pwsh tools/dev-start.ps1 -ImpersonateEmail test.user@kojamo.fi
 #
 # Pure-PowerShell 7+. Requires the .NET SDK; Aspire mode also requires
 # the matching `aspire` CLI version that the AppHost project pins.
@@ -22,7 +23,15 @@
 param(
     # Skip the dotnet build step. Useful when iterating quickly and the
     # last build is known good.
-    [switch] $NoBuild
+    [switch] $NoBuild,
+
+    # Dev-only impersonation override. When set, the API resolves every
+    # authenticated request to this email regardless of the principal's
+    # claims (see EmailResolver.SetDevelopmentImpersonation). You still
+    # log into Azure AD with your real account; the back-end behaves as
+    # though the impersonated mVasu user made the call — handy for
+    # testing PermissionPolicy roles other than your own.
+    [string] $ImpersonateEmail
 )
 
 $ErrorActionPreference = 'Stop'
@@ -188,6 +197,21 @@ function Start-DirectMode {
 }
 
 Ensure-PwaCert
+
+# Propagate impersonation to whichever child process the modes spawn —
+# both modes use the standard ASP.NET configuration env-var convention
+# (double underscore = section separator), and the API's startup hook
+# only honors it when ASPNETCORE_ENVIRONMENT == Development. Setting
+# the var in this script's process means Start-Process / Process.Start
+# inherits it; for Aspire mode AppHost.cs forwards it to the API
+# resource explicitly.
+if ($ImpersonateEmail) {
+    $env:Development__ImpersonateEmail = $ImpersonateEmail
+    Write-Host ""
+    Write-Host "DEV IMPERSONATION ACTIVE: API will resolve every authenticated request to $ImpersonateEmail" -ForegroundColor Yellow
+    Write-Host "Disable by re-running without -ImpersonateEmail." -ForegroundColor DarkGray
+    Write-Host ""
+}
 
 if (Test-Path $apphost) {
     Start-AspireMode
