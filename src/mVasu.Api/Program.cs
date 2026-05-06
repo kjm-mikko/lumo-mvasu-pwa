@@ -15,6 +15,12 @@ using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Aspire wiring — registers OpenTelemetry, service discovery, default
+// resilience, and the standard /health + /alive probes used by the
+// AppHost's `WithHttpHealthCheck` call. Safe to run outside Aspire too;
+// when launched via `dotnet run` directly it just adds telemetry plumbing.
+builder.AddServiceDefaults();
+
 builder.Host.UseSerilog((context, services, configuration) =>
 {
     configuration
@@ -99,6 +105,11 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Aspire convention endpoints — `/health` (full check pipeline) and
+// `/alive` (liveness only). These complement the existing `/api/health`
+// route the dashboard uses for its WithHttpHealthCheck probe.
+app.MapDefaultEndpoints();
 
 app.MapGet("/api/health", () => new HealthCheckDto(
         Status: "Healthy",

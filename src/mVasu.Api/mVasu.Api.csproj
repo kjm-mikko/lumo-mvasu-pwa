@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\mVasu.Api.Contracts\mVasu.Api.Contracts.csproj" />
+    <ProjectReference Include="..\mVasu.ServiceDefaults\mVasu.ServiceDefaults.csproj" />
   </ItemGroup>
 
 </Project>
