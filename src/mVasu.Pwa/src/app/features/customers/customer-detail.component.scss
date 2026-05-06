@@ -159,11 +159,44 @@
   dt { color: var(--lumo-text-secondary); margin: 0; }
   dd { margin: 0; color: var(--lumo-text-primary); word-break: break-word; }
 
+  // XAF metadata-driven decorations.
+  // RuleRequiredField → asterisk after the label, even on read-only views,
+  // so the user understands which fields drive the back-end validation.
+  dt.is-required::after {
+    content: '*';
+    color: var(--lumo-warn);
+    margin-left: 2px;
+    font-weight: 600;
+  }
+
+  // ModelDefault("AllowEdit", "False") — render the value cell dimmer to
+  // signal it can't be changed once edit mode lands. The dt label keeps
+  // its normal weight so the field name is still scannable.
+  dt.is-readonly { font-style: italic; }
+  dd.is-readonly { color: var(--lumo-text-secondary); }
+
   a {
     color: var(--lumo-accent);
     text-decoration: none;
     &:hover { text-decoration: underline; }
   }
+}
+
+// Asiakas-base Appearance.RuleRequiredField.Highlight — paints the hero
+// red when the underlying SukuNimi column is null/empty. Mirrors the XAF
+// DetailView's red highlight on the name field in that condition.
+.hero.appearance-error {
+  background: #FEF2F2;
+  border: 1px solid #FCA5A5;
+  border-radius: var(--lumo-radius-md);
+  padding: var(--lumo-space-md);
+}
+
+.hero-warning {
+  margin: var(--lumo-space-xs) 0 0;
+  font-size: var(--lumo-font-sm);
+  color: #B91C1C;
+  font-weight: 500;
 }
 
 @media (max-width: 480px) {

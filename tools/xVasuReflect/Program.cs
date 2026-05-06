@@ -12,12 +12,17 @@ using DevExpress.Xpo;
 //   dotnet run --project tools/xVasuReflect -- --methods DevExpress.Xpo.Session SelectData
 //   dotnet run --project tools/xVasuReflect -- --xaf-fields xVasu.Data.Asma.Henkilo
 //   dotnet run --project tools/xVasuReflect -- --xaf-controllers xVasu.Data.Asma.Henkilo
+//   dotnet run --project tools/xVasuReflect -- --xaf-rules xVasu.Data.Asma.Henkilo
 //   dotnet run --project tools/xVasuReflect            (defaults to the task entity)
 //
 // The --xaf-fields and --xaf-controllers commands work for any XAF-managed
 // persistent type — Tiskilista, Hakemus, Sopimus, … — and are how we
 // reverse-engineer XAF DetailView layouts and ViewController action
 // inventories without having Model.xafml on disk.
+//
+// `--xaf-rules <type>` is a sibling of `--xaf-fields` that produces a
+// categorised dump (required / read-only / size / mask / range / regex /
+// appearance) — used as the canonical spec for PWA detail views.
 
 var typeNames = args.Length == 0
     ? new[] { "xVasu.Data.Security.xVasuSecuritySystemUserTask" }
@@ -73,6 +78,17 @@ if (typeNames[0] == "--xaf-all-controllers")
     // controller assemblies are present at all.
     var nameFilter = typeNames.Length > 1 ? typeNames[1] : null;
     DumpAllXafControllers(nameFilter);
+    return 0;
+}
+
+if (typeNames[0] == "--xaf-rules")
+{
+    if (typeNames.Length < 2)
+    {
+        Console.Error.WriteLine("--xaf-rules requires a type name (e.g. xVasu.Data.Asma.Henkilo)");
+        return 1;
+    }
+    DumpXafRules(typeNames[1]);
     return 0;
 }
 
@@ -628,4 +644,208 @@ static bool ControllerTargetsType(Type controllerType, Type target)
     }
 
     return false;
+}
+
+// -- --xaf-rules ----------------------------------------------------------
+//
+// Categorised dump of XAF DetailView-relevant attributes:
+//   * Required fields        (RuleRequiredField)
+//   * Read-only fields       (ModelDefault AllowEdit=False)
+//   * Size constraints       (Size, with mask if ModelDefault EditMask is set)
+//   * Range / regex / unique (RuleRange, RuleRegularExpression, RuleUniqueValue)
+//   * Hidden by default      (VisibleInDetailView=False)
+//   * Class-level Appearance rules (TargetItems / Visibility / BackColor /
+//     FontColor / Enabled / Criteria / Context / Priority)
+//
+// Re-uses the HasAttribute / GetSingleBoolArg / RenderArg helpers
+// already defined for --xaf-fields.
+
+static void DumpXafRules(string fullName)
+{
+    var type = ResolveType(fullName);
+    if (type is null)
+    {
+        Console.WriteLine($"# {fullName} — NOT FOUND");
+        return;
+    }
+
+    Console.WriteLine($"# === XAF rules for {type.FullName} ===");
+    Console.WriteLine($"  base: {type.BaseType?.FullName}");
+    Console.WriteLine();
+
+    var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy)
+        .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    var required        = new List<string>();
+    var readOnly        = new List<string>();
+    var hiddenInDetail  = new List<string>();
+    var sizeRows        = new List<(string Name, int Size, string? Mask, string? MaskType)>();
+    var rangeRows       = new List<(string Name, string Args)>();
+    var regexRows       = new List<(string Name, string Args)>();
+    var uniqueRows      = new List<(string Name, string Args)>();
+
+    foreach (var prop in props)
+    {
+        var attrs = prop.GetCustomAttributesData();
+
+        if (HasAttribute(attrs, "RuleRequiredFieldAttribute"))
+            required.Add(prop.Name);
+
+        var allowEdit = ReadModelDefault(attrs, "AllowEdit");
+        if (string.Equals(allowEdit, "False", StringComparison.OrdinalIgnoreCase))
+            readOnly.Add(prop.Name);
+
+        var visibleInDetail = GetSingleBoolArg(attrs, "VisibleInDetailViewAttribute");
+        if (visibleInDetail == false)
+            hiddenInDetail.Add(prop.Name);
+
+        var sizeAttr = attrs.FirstOrDefault(a => a.AttributeType.Name is "SizeAttribute" or "FieldSizeAttribute");
+        if (sizeAttr is not null)
+        {
+            var size = (sizeAttr.ConstructorArguments.Count > 0 && sizeAttr.ConstructorArguments[0].Value is int si)
+                ? si : 0;
+            var mask     = ReadModelDefault(attrs, "EditMask");
+            var maskType = ReadModelDefault(attrs, "EditMaskType");
+            if (size > 0 || mask is not null) sizeRows.Add((prop.Name, size, mask, maskType));
+        }
+
+        var rangeAttr = attrs.FirstOrDefault(a => a.AttributeType.Name == "RuleRangeAttribute");
+        if (rangeAttr is not null)
+            rangeRows.Add((prop.Name, RenderAttrArgs(rangeAttr)));
+
+        var regexAttr = attrs.FirstOrDefault(a => a.AttributeType.Name == "RuleRegularExpressionAttribute");
+        if (regexAttr is not null)
+            regexRows.Add((prop.Name, RenderAttrArgs(regexAttr)));
+
+        var uniqAttr = attrs.FirstOrDefault(a => a.AttributeType.Name == "RuleUniqueValueAttribute");
+        if (uniqAttr is not null)
+            uniqueRows.Add((prop.Name, RenderAttrArgs(uniqAttr)));
+    }
+
+    PrintSection("Required fields (RuleRequiredField)", required.Select(n => $"  - {n}"));
+    PrintSection("Read-only fields (ModelDefault AllowEdit=False)", readOnly.Select(n => $"  - {n}"));
+    PrintSection("Hidden in DetailView", hiddenInDetail.Select(n => $"  - {n}"));
+    PrintSection(
+        "Size / mask",
+        sizeRows.Select(r =>
+        {
+            var sizeText = r.Size > 0 ? r.Size.ToString().PadRight(5) : "  -  ";
+            var maskText = r.Mask is null
+                ? string.Empty
+                : $"  (mask: {r.Mask}{(r.MaskType is null ? string.Empty : $", {r.MaskType}")})";
+            return $"  - {r.Name,-32} {sizeText}{maskText}";
+        }));
+    PrintSection("Range validations (RuleRange)", rangeRows.Select(r => $"  - {r.Name,-32} {r.Args}"));
+    PrintSection("Regex validations (RuleRegularExpression)", regexRows.Select(r => $"  - {r.Name,-32} {r.Args}"));
+    PrintSection("Unique value rules (DB-level, not enforced UI-side)",
+        uniqueRows.Select(r => $"  - {r.Name,-32} {r.Args}"));
+
+    DumpAppearanceRules(type);
+}
+
+static void DumpAppearanceRules(Type type)
+{
+    var rules = new List<string>();
+    var t = type;
+    while (t is not null && t != typeof(object))
+    {
+        foreach (var attr in t.GetCustomAttributesData())
+        {
+            if (attr.AttributeType.Name != "AppearanceAttribute") continue;
+            rules.Add(FormatAppearance(attr, t));
+        }
+        t = t.BaseType;
+    }
+
+    PrintSection("Class-level Appearance rules", rules);
+}
+
+static string FormatAppearance(CustomAttributeData attr, Type declaringType)
+{
+    string? id           = null;
+    string? targetItems  = null;
+    string? criteria     = null;
+    string? context      = null;
+    int?    priority     = null;
+    string? backColor    = null;
+    string? fontColor    = null;
+    int?    visibility   = null;
+    bool?   enabled      = null;
+    string? appearanceItemType = null;
+
+    if (attr.ConstructorArguments.Count > 0 && attr.ConstructorArguments[0].Value is string rid)
+        id = rid;
+
+    foreach (var n in attr.NamedArguments)
+    {
+        var v = n.TypedValue.Value;
+        switch (n.MemberName)
+        {
+            case "TargetItems":         targetItems = v?.ToString(); break;
+            case "Criteria":            criteria    = v?.ToString(); break;
+            case "Context":             context     = v?.ToString(); break;
+            case "Priority":            priority    = v as int?;     break;
+            case "BackColor":           backColor   = v?.ToString(); break;
+            case "FontColor":           fontColor   = v?.ToString(); break;
+            case "Visibility":          visibility  = v as int?;     break;
+            case "Enabled":             enabled     = v as bool?;    break;
+            case "AppearanceItemType":  appearanceItemType = v?.ToString(); break;
+        }
+    }
+
+    var effects = new List<string>();
+    if (visibility.HasValue) effects.Add($"Visibility={visibility}");
+    if (enabled.HasValue)    effects.Add($"Enabled={enabled}");
+    if (backColor is not null) effects.Add($"BackColor={backColor}");
+    if (fontColor is not null) effects.Add($"FontColor={fontColor}");
+
+    var effectText   = effects.Count > 0 ? string.Join(", ", effects) : "(no effect)";
+    var targetText   = targetItems ?? "*";
+    var contextText  = context ?? "Any";
+    var idText       = id ?? "(unnamed)";
+    var origin       = declaringType.Name;
+    var criteriaText = criteria ?? "always";
+    var itemTypeText = appearanceItemType is null ? "" : $" [item={appearanceItemType}]";
+    var prioText     = priority.HasValue ? $" prio={priority}" : "";
+
+    return $"  - [{origin}] {idText}\n" +
+           $"      target: {targetText}{itemTypeText}\n" +
+           $"      effect: {effectText}\n" +
+           $"      when:   {criteriaText}\n" +
+           $"      ctx:    {contextText}{prioText}";
+}
+
+static void PrintSection(string title, IEnumerable<string> items)
+{
+    var list = items.ToList();
+    if (list.Count == 0) return;
+    Console.WriteLine($"## {title}");
+    foreach (var line in list) Console.WriteLine(line);
+    Console.WriteLine();
+}
+
+/// <summary>Reads ModelDefault("key", "value") for a given key from a member's attributes.</summary>
+static string? ReadModelDefault(IList<CustomAttributeData> attrs, string key)
+{
+    foreach (var a in attrs)
+    {
+        if (a.AttributeType.Name != "ModelDefaultAttribute") continue;
+        if (a.ConstructorArguments.Count < 2) continue;
+        if (a.ConstructorArguments[0].Value is string k
+            && string.Equals(k, key, StringComparison.OrdinalIgnoreCase)
+            && a.ConstructorArguments[1].Value is string v)
+        {
+            return v;
+        }
+    }
+    return null;
+}
+
+/// <summary>Renders all positional + named args of an attribute as a single comma-joined string.</summary>
+static string RenderAttrArgs(CustomAttributeData attr)
+{
+    var positional = attr.ConstructorArguments.Select(RenderArg);
+    var named = attr.NamedArguments.Select(n => $"{n.MemberName}={RenderArg(n.TypedValue)}");
+    return string.Join(", ", positional.Concat(named));
 }

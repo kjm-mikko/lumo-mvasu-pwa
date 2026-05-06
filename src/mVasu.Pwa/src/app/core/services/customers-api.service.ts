@@ -39,6 +39,17 @@ interface CustomerWireDto {
   readonly businessId?: string | null;
   readonly parentCompanyId?: string | null;
   readonly parentCompanyName?: string | null;
+  // Detail-only canonical fields (list endpoint sends nulls)
+  readonly postalCode?: string | null;
+  readonly country?: string | null;
+  readonly language?: string | null;
+  readonly profession?: string | null;
+  readonly industry?: string | null;
+  readonly workplace?: string | null;
+  readonly income?: number | null;
+  readonly emailMarketingAllowed?: boolean | null;
+  readonly phoneMarketingAllowed?: boolean | null;
+  readonly directMarketingForbidden?: boolean | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -79,49 +90,49 @@ export class CustomersApiService {
 
 function toCustomer(c: CustomerWireDto): Customer {
   const type = c.type as CustomerType;
+  // Shared base — list rows leave the canonical detail fields null, so
+  // these spreads contribute nothing on the list path but populate the
+  // detail view in full when GetById fills them.
+  const base = {
+    id: c.id,
+    displayName: c.displayName,
+    initials: c.initials,
+    counts: c.counts,
+    primaryAddress: c.primaryAddress ?? undefined,
+    city: c.city ?? undefined,
+    tag: c.tag ?? undefined,
+    phone: c.phone ?? undefined,
+    email: c.email ?? undefined,
+    postalCode: c.postalCode ?? undefined,
+    country: c.country ?? undefined,
+    language: c.language ?? undefined,
+    profession: c.profession ?? undefined,
+    industry: c.industry ?? undefined,
+    workplace: c.workplace ?? undefined,
+    income: c.income ?? undefined,
+    emailMarketingAllowed: c.emailMarketingAllowed ?? undefined,
+    phoneMarketingAllowed: c.phoneMarketingAllowed ?? undefined,
+    directMarketingForbidden: c.directMarketingForbidden ?? undefined,
+  };
   switch (type) {
     case 'person':
       return {
+        ...base,
         type,
-        id: c.id,
-        displayName: c.displayName,
-        initials: c.initials,
-        counts: c.counts,
-        primaryAddress: c.primaryAddress ?? undefined,
-        city: c.city ?? undefined,
-        tag: c.tag ?? undefined,
-        phone: c.phone ?? undefined,
-        email: c.email ?? undefined,
         firstName: c.firstName ?? '',
         lastName: c.lastName ?? '',
       };
     case 'company':
       return {
+        ...base,
         type,
-        id: c.id,
-        displayName: c.displayName,
-        initials: c.initials,
-        counts: c.counts,
-        primaryAddress: c.primaryAddress ?? undefined,
-        city: c.city ?? undefined,
-        tag: c.tag ?? undefined,
-        phone: c.phone ?? undefined,
-        email: c.email ?? undefined,
         companyName: c.companyName ?? c.displayName,
         businessId: c.businessId ?? undefined,
       };
     case 'contact-person':
       return {
+        ...base,
         type,
-        id: c.id,
-        displayName: c.displayName,
-        initials: c.initials,
-        counts: c.counts,
-        primaryAddress: c.primaryAddress ?? undefined,
-        city: c.city ?? undefined,
-        tag: c.tag ?? undefined,
-        phone: c.phone ?? undefined,
-        email: c.email ?? undefined,
         firstName: c.firstName ?? '',
         lastName: c.lastName ?? '',
         parentCompanyId: c.parentCompanyId ?? '',
