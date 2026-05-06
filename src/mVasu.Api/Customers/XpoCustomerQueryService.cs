@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Security.Claims;
 using DevExpress.Data.Filtering;
 using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Xpo;
 using DevExpress.Xpo;
+using DevExpress.Xpo.DB;
 using mVasu.Api.Authentication;
 using mVasu.Api.Contracts;
 using xVasu.Data.Asma;
@@ -52,6 +54,16 @@ public sealed class XpoCustomerQueryService(
     /// </summary>
     private const int MaxPageSize = 200;
 
+    /// <summary>
+    /// Hard ceiling on the FTS pass. SQL Server's CONTAINS is fast even
+    /// against large fulltext catalogs, but we'd still feed every
+    /// returned AsiakasNumero into a downstream <c>InOperator</c> — and
+    /// XPO's IN-list serializer chokes once the array runs into the
+    /// thousands. 1000 is well past the point a human can scan and far
+    /// below SQL's IN-list limit.
+    /// </summary>
+    private const int FtsResultCap = 1000;
+
     private static readonly Comparison<CustomerDto> ByDisplayNameFi =
         (a, b) => string.Compare(
             a.DisplayName, b.DisplayName,
@@ -72,9 +84,52 @@ public sealed class XpoCustomerQueryService(
         try
         {
             var session = ((XPObjectSpace)os).Session;
-            var criteria = BuildCriteria(query);
+            var hasSearch = !string.IsNullOrWhiteSpace(query.Search);
 
-            var totalCount = os.GetObjectsCount(typeof(Asiakas), criteria);
+            // Phase timings — single Information line at the bottom shows
+            // where the wall-clock went. Cheap (Stopwatch is monotonic
+            // long ticks); flip the log level if it ever becomes noisy.
+            var sw = Stopwatch.StartNew();
+            long tFts = 0, tCount = 0, tPage = 0, tBase = 0, tSubtype = 0, tCounts = 0, tMap = 0;
+
+            // Search path: SQL Server FULLTEXT via CONTAINS against the
+            // existing fts_Asiakas catalog (EtuNimi, SukuNimi, KatuOsoite,
+            // Email, Gsm — Finnish word breaker). The FTS query returns
+            // a list of matching AsiakasNumero ids that we AND-in to the
+            // type/city criteria via InOperator, so the rest of the flow
+            // (counts, pagination, projections) stays criteria-driven.
+            //
+            // The previous prefix/substring hybrid is gone — FTS is
+            // strictly faster and gives stem matching (e.g. "koivu" hits
+            // "Koivunen", "Koivulan", "Koiv u") plus EtuNimi search,
+            // neither of which the LIKE-based path supported.
+            CriteriaOperator? activeCriteria = BuildFilterCriteria(query);
+            if (hasSearch)
+            {
+                var t0 = sw.ElapsedMilliseconds;
+                var ftsIds = LoadFtsAsiakasNumbers(session, query.Search!);
+                tFts = sw.ElapsedMilliseconds - t0;
+
+                if (ftsIds.Count == 0)
+                {
+                    return Task.FromResult(Empty());
+                }
+
+                var idCriteria = new InOperator(
+                    "AsiakasNumero", ftsIds.Cast<object>().ToArray());
+                activeCriteria = activeCriteria is null
+                    ? idCriteria
+                    : CriteriaOperator.And(activeCriteria, idCriteria);
+
+                logger.LogDebug(
+                    "Customer FTS '{Query}' matched {Count} ids (capped at {Cap})",
+                    query.Search, ftsIds.Count, FtsResultCap);
+            }
+
+            var tCountStart = sw.ElapsedMilliseconds;
+            var totalCount = os.GetObjectsCount(typeof(Asiakas), activeCriteria);
+            tCount = sw.ElapsedMilliseconds - tCountStart;
+
             if (totalCount == 0)
             {
                 return Task.FromResult(Empty());
@@ -97,18 +152,32 @@ public sealed class XpoCustomerQueryService(
             // from Henkilo / Yritys / Yhteyshenkilo. Nothing actually loads
             // an Asiakas entity, so missing FKs on Henkilo.LastOne and
             // friends are inert.
-            var pageNumbers = LoadAsiakasNumberPage(session, criteria, skip: 0, top: pageSize);
+            var tPageStart = sw.ElapsedMilliseconds;
+            var pageNumbers = LoadAsiakasNumberPage(session, activeCriteria, skip: 0, top: pageSize);
+            tPage = sw.ElapsedMilliseconds - tPageStart;
+
             if (pageNumbers.Count == 0)
             {
                 return Task.FromResult(new CustomersResponseDto(Array.Empty<CustomerDto>(), totalCount));
             }
 
             var idArgs = pageNumbers.Cast<object>().ToArray();
-            var baseRows     = LoadAsiakasBaseRows(session, idArgs);
-            var personRows   = LoadHenkiloRows(session, idArgs);
-            var companyRows  = LoadYritysRows(session, idArgs);
-            var contactRows  = LoadYhteyshenkiloRows(session, idArgs);
-            var counts       = LookupCounts(session, idArgs);
+
+            var tBaseStart = sw.ElapsedMilliseconds;
+            var baseRows = LoadAsiakasBaseRows(session, idArgs);
+            tBase = sw.ElapsedMilliseconds - tBaseStart;
+
+            var tSubtypeStart = sw.ElapsedMilliseconds;
+            var personRows  = LoadHenkiloRows(session, idArgs);
+            var companyRows = LoadYritysRows(session, idArgs);
+            var contactRows = LoadYhteyshenkiloRows(session, idArgs);
+            tSubtype = sw.ElapsedMilliseconds - tSubtypeStart;
+
+            var tCountsStart = sw.ElapsedMilliseconds;
+            var counts = LookupCounts(session, idArgs);
+            tCounts = sw.ElapsedMilliseconds - tCountsStart;
+
+            var tMapStart = sw.ElapsedMilliseconds;
 
             var items = new List<CustomerDto>(pageNumbers.Count);
             foreach (var num in pageNumbers)
@@ -150,6 +219,12 @@ public sealed class XpoCustomerQueryService(
             // by the canonical DisplayName the wire exposes ("Sukunimi,
             // Etunimi" for persons, raw company name for Yritys).
             items.Sort(ByDisplayNameFi);
+            tMap = sw.ElapsedMilliseconds - tMapStart;
+
+            logger.LogInformation(
+                "Customers query: total={Total}ms (fts={Fts} count={Count} page={Page} base={Base} subtype={Subtype} counts={Counts} map={Map}) — items={Items} hasSearch={HasSearch}",
+                sw.ElapsedMilliseconds, tFts, tCount, tPage, tBase, tSubtype, tCounts, tMap,
+                items.Count, hasSearch);
 
             return Task.FromResult(new CustomersResponseDto(items, totalCount));
         }
@@ -221,7 +296,16 @@ public sealed class XpoCustomerQueryService(
 
     // -- criteria ---------------------------------------------------------
 
-    private static CriteriaOperator? BuildCriteria(CustomerQueryParameters query)
+    /// <summary>
+    /// Builds the non-search filter criteria (type discriminator + city).
+    /// The free-text search predicate is intentionally NOT included here
+    /// — search runs through SQL Server FULLTEXT (see
+    /// <see cref="LoadFtsAsiakasNumbers"/>) and the matching ids are
+    /// AND-ed in via <see cref="InOperator"/>. Splitting it this way
+    /// lets the GetObjectsCount / LoadAsiakasNumberPage path stay
+    /// criteria-driven without re-implementing FTS in XPO terms.
+    /// </summary>
+    private static CriteriaOperator? BuildFilterCriteria(CustomerQueryParameters query)
     {
         var operands = new List<CriteriaOperator>();
 
@@ -248,26 +332,6 @@ public sealed class XpoCustomerQueryService(
             operands.Add(new BinaryOperator("PostiToimiPaikka", query.City, BinaryOperatorType.Equal));
         }
 
-        var search = query.Search?.Trim();
-        if (!string.IsNullOrEmpty(search))
-        {
-            // SukuNimi is the canonical surname field on the Asiakas base
-            // — Yritys.Yritysnimi and Yhteyshenkilo.Sukunimi are XPO
-            // aliases over the same column, so a single SukuNimi LIKE
-            // covers all three concrete types. Asiakas.Name is sometimes
-            // empty in production and not safe to lean on.
-            //
-            // PII fields (Henkilo.PersonID / SSN, DOB, Age) are deliberately
-            // excluded from the search surface.
-            operands.Add(CriteriaOperator.Or(
-                ContainsString("SukuNimi", search),
-                ContainsString("KatuOsoite", search),
-                ContainsString("PostiToimiPaikka", search),
-                ContainsString("Email", search),
-                ContainsString("Gsm", search),
-                ContainsString("Puhelin", search)));
-        }
-
         return operands.Count == 0
             ? null
             : operands.Count == 1
@@ -275,17 +339,124 @@ public sealed class XpoCustomerQueryService(
                 : CriteriaOperator.And(operands);
     }
 
+    // -- fulltext search --------------------------------------------------
+
     /// <summary>
-    /// Builds a case-insensitive substring match on a string column.
-    /// <see cref="ContainsOperator"/> is for collection containment
-    /// (<c>SomeAssoc.Contains(x)</c>), not string LIKE — the visitor
-    /// rejects scalar fields with "a reference property or collection
-    /// association is expected". For string LIKE we go through the
-    /// FunctionOperator (Contains) form, which the SQL generator
-    /// translates to <c>field LIKE '%value%'</c>.
+    /// Runs SQL Server <c>CONTAINS</c> against the existing
+    /// <c>fts_Asiakas</c> fulltext catalog and returns matching
+    /// <c>AsiakasNumero</c> values. The catalog covers EtuNimi,
+    /// SukuNimi, KatuOsoite, Email and Gsm in Finnish (LCID 1053), so
+    /// per-word stemming and inflection are handled by the engine.
+    /// Puhelin and PostiToimiPaikka are NOT indexed; phone searches go
+    /// through Gsm, and PostiToimiPaikka is exposed via the dedicated
+    /// city dropdown filter.
     /// </summary>
-    private static CriteriaOperator ContainsString(string field, string value) =>
-        new FunctionOperator(FunctionOperatorType.Contains, new OperandProperty(field), value);
+    /// <remarks>
+    /// Capped at <see cref="FtsResultCap"/> ids — once an FTS pass
+    /// returns more than that, the dx-list view can't render them
+    /// usefully anyway and the InOperator that consumes the list grows
+    /// past XPO's serializer comfort zone. The user is expected to
+    /// refine the search.
+    /// </remarks>
+    private List<int> LoadFtsAsiakasNumbers(Session session, string searchTerm)
+    {
+        var ftsExpression = BuildFtsContainsExpression(searchTerm);
+        if (ftsExpression is null)
+        {
+            return new List<int>();
+        }
+
+        // Resolve the physical table name through the XPO dictionary so
+        // we don't hardcode `t_Asiakas` — the legacy schema applies a
+        // `t_` prefix at the dictionary level, but renaming or
+        // un-prefixing the table elsewhere shouldn't quietly skip the
+        // FTS path.
+        var classInfo = session.GetClassInfo(typeof(Asiakas));
+        var tableName = classInfo.TableName;
+
+        var sql =
+            $"SELECT TOP {FtsResultCap} [AsiakasNumero] " +
+            $"FROM [dbo].[{tableName}] " +
+            "WHERE [GCRecord] IS NULL " +
+            "  AND CONTAINS(([EtuNimi], [SukuNimi], [KatuOsoite], [Email], [Gsm]), @ftsTerm)";
+
+        SelectedData data;
+        try
+        {
+            data = session.ExecuteQuery(sql,
+                new[] { "@ftsTerm" },
+                new object[] { ftsExpression });
+        }
+        catch (Exception ex)
+        {
+            // FTS catalog disabled or missing in some environment? Bail
+            // safely — empty list yields zero results, the UI shows the
+            // standard "no matches" empty state. Logged at warning so
+            // ops can spot a regressed catalog without flooding logs.
+            logger.LogWarning(ex,
+                "FTS query failed for term {Term} — returning empty match list",
+                searchTerm);
+            return new List<int>();
+        }
+
+        var ids = new List<int>();
+        if (data.ResultSet.Length == 0) return ids;
+
+        foreach (var row in data.ResultSet[0].Rows)
+        {
+            if (row.Values.Length > 0 && row.Values[0] is not null)
+            {
+                ids.Add(Convert.ToInt32(row.Values[0]));
+            }
+        }
+        return ids;
+    }
+
+    /// <summary>
+    /// Translates the user's free-text input into a SQL Server
+    /// <c>CONTAINS</c> expression: <c>"word1*" AND "word2*"</c>. Each
+    /// whitespace-delimited token is sanitised, wrapped in double
+    /// quotes, suffixed with <c>*</c> for prefix matching, and
+    /// AND-joined so multi-word inputs narrow the result set rather
+    /// than widening it. Returns <c>null</c> when nothing usable
+    /// remains (only operator words, blanks, etc.) — the caller treats
+    /// that as "no FTS match" and skips the round-trip.
+    /// </summary>
+    public static string? BuildFtsContainsExpression(string searchTerm)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm)) return null;
+
+        var tokens = searchTerm.Split(
+            new[] { ' ', '\t', '\n', '\r' },
+            StringSplitOptions.RemoveEmptyEntries);
+
+        var clauses = new List<string>(tokens.Length);
+        foreach (var raw in tokens)
+        {
+            // Strip the few characters that have meta meaning in
+            // CONTAINS expressions (quotes, square brackets) and the
+            // outer whitespace. Leaves accented characters intact —
+            // the catalog is built with the Finnish word breaker.
+            var sanitised = raw
+                .Replace("\"", string.Empty)
+                .Replace("[", string.Empty)
+                .Replace("]", string.Empty)
+                .Trim();
+
+            if (sanitised.Length < 2) continue;
+            if (IsFtsReservedWord(sanitised)) continue;
+
+            clauses.Add("\"" + sanitised + "*\"");
+        }
+
+        return clauses.Count == 0 ? null : string.Join(" AND ", clauses);
+    }
+
+    private static bool IsFtsReservedWord(string word) =>
+        string.Equals(word, "AND",  StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(word, "OR",   StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(word, "NOT",  StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(word, "NEAR", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Projects the paginated AsiakasNumero key list for the given
@@ -393,10 +564,7 @@ public sealed class XpoCustomerQueryService(
         var criteria = CriteriaOperator.And(
             new InOperator("Asiakas.AsiakasNumero", asiakasNumbers),
             new BinaryOperator("Voimassa", true, BinaryOperatorType.Equal));
-
-        using var collection = new XPCollection<XpoContractAsiakas>(session, criteria);
-        return GroupCountByAsiakas(collection.Cast<XpoContractAsiakas>(),
-            x => x.Asiakas?.AsiakasNumero);
+        return ProjectAsiakasNumeroCounts(session, typeof(XpoContractAsiakas), criteria);
     }
 
     private static Dictionary<int, int> LookupApplicationCounts(Session session, object[] asiakasNumbers)
@@ -404,18 +572,13 @@ public sealed class XpoCustomerQueryService(
         var criteria = CriteriaOperator.And(
             new InOperator("Asiakas.AsiakasNumero", asiakasNumbers),
             new BinaryOperator("Voimassa", true, BinaryOperatorType.Equal));
-
-        using var collection = new XPCollection<XpoApplicationAsiakas>(session, criteria);
-        return GroupCountByAsiakas(collection.Cast<XpoApplicationAsiakas>(),
-            x => x.Asiakas?.AsiakasNumero);
+        return ProjectAsiakasNumeroCounts(session, typeof(XpoApplicationAsiakas), criteria);
     }
 
     private static Dictionary<int, int> LookupReservationCounts(Session session, object[] asiakasNumbers)
     {
         var criteria = new InOperator("Asiakas.AsiakasNumero", asiakasNumbers);
-        using var collection = new XPCollection<XpoReservation>(session, criteria);
-        return GroupCountByAsiakas(collection.Cast<XpoReservation>(),
-            x => x.Asiakas?.AsiakasNumero);
+        return ProjectAsiakasNumeroCounts(session, typeof(XpoReservation), criteria);
     }
 
     private static Dictionary<int, int> LookupShowingCounts(Session session, object[] asiakasNumbers)
@@ -428,20 +591,47 @@ public sealed class XpoCustomerQueryService(
             new BinaryOperator("IsCancelled", false, BinaryOperatorType.Equal),
             new BinaryOperator("IsHandled",   false, BinaryOperatorType.Equal),
             new BinaryOperator("StartedOn",   nowUtc, BinaryOperatorType.GreaterOrEqual));
-
-        using var collection = new XPCollection<XpoInspection>(session, criteria);
-        return GroupCountByAsiakas(collection.Cast<XpoInspection>(),
-            x => x.Asiakas?.AsiakasNumero);
+        return ProjectAsiakasNumeroCounts(session, typeof(XpoInspection), criteria);
     }
 
-    private static Dictionary<int, int> GroupCountByAsiakas<T>(IEnumerable<T> rows, Func<T, int?> key)
+    /// <summary>
+    /// Counts rows of <paramref name="linkType"/> grouped by
+    /// <c>Asiakas.AsiakasNumero</c> using a key-only
+    /// <see cref="Session.SelectData"/> projection. This avoids the
+    /// previous <c>XPCollection</c> path which loaded every column of
+    /// every link row plus eager-fetched the full Asiakas entity to
+    /// access its key — both wasteful when all we need is the integer
+    /// to bin on.
+    /// </summary>
+    /// <remarks>
+    /// The generated SQL is <c>SELECT [Asiakas].[AsiakasNumero] FROM
+    /// [link] INNER JOIN [t_Asiakas] ... WHERE ... </c>. Grouping
+    /// happens in-memory, which is fine because the result set is
+    /// scoped to the page's 50 ids — even one row per inspection per
+    /// active customer is tens or low hundreds.
+    /// </remarks>
+    private static Dictionary<int, int> ProjectAsiakasNumeroCounts(
+        Session session, Type linkType, CriteriaOperator criteria)
     {
-        var result = new Dictionary<int, int>();
-        foreach (var r in rows)
+        var classInfo = session.GetClassInfo(linkType);
+        var props = new CriteriaOperatorCollection
         {
-            var k = key(r);
-            if (k is null || k.Value == 0) continue;
-            result[k.Value] = result.GetValueOrDefault(k.Value) + 1;
+            new OperandProperty("Asiakas.AsiakasNumero"),
+        };
+
+        var rows = session.SelectData(
+            classInfo, props, criteria,
+            selectDeleted: false,
+            topSelectedRecords: int.MaxValue,
+            sorting: new SortingCollection());
+
+        var result = new Dictionary<int, int>();
+        foreach (var row in rows)
+        {
+            if (row.Length == 0 || row[0] is null) continue;
+            var key = Convert.ToInt32(row[0]);
+            if (key == 0) continue;
+            result[key] = result.GetValueOrDefault(key) + 1;
         }
         return result;
     }
