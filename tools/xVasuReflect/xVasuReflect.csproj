@@ -9,7 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup Label="xVasu private feed (kjm-sk-ado) — pin to the same CI tag as mVasu.Api">
-    <PackageReference Include="xVasu.Module" Version="1.1.0-CI-1802" />
+    <PackageReference Include="xVasu.Module" Version="1.1.0-CI-1808" />
+    <!-- xVasu.Controllers carries the XAF ViewControllers (Impersonate, SMS,
+         Pikavaraus, ATPI Operaatiot, …). Only the reflect tool needs them
+         — mVasu.Api does NOT reference this package, since the controllers
+         require a XafApplication host the API never instantiates. -->
+    <PackageReference Include="xVasu.Controllers" Version="1.1.0-CI-1808" />
   </ItemGroup>
 
   <ItemGroup Label="Pin transitive packages past known vulnerabilities (mirror mVasu.Api)">

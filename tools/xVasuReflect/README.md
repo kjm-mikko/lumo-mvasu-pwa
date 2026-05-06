@@ -52,18 +52,27 @@ dotnet run --project tools/xVasuReflect -- --xaf-all-controllers Asiakas  # name
 attribuutit dumpataan erikseen (`DefaultClassOptions`, `ImageName`,
 `NavigationItem`, `ModelDefault("Caption", …)`, `Appearance`-säännöt).
 
-**Miksi `--xaf-controllers` voi palauttaa 0:n.** xVasu-projektin custom
-ViewController-luokat (Impersonate, SMS, Pikavaraus, ATPI Operaatiot yms.)
-asuvat Web/Win/Blazor-puolen modulissa (esim. `xVasu.Module.Web.dll`) joka
-ei ole tämän työkalun NuGet-ribkkeen alaisuudessa. xVasu.Module-paketti
-sisältää persistenttiluokat ja perusservicet, mutta ei UI-puolen
-controllers:eja. Action-listan löytäminen vaatii joko:
+**xVasu.Controllers** -pakettiviittaus tuo XAF-controllers:t reflection:n
+ulottuville. Esim. Henkilö-tyypille `--xaf-controllers` listaa:
 
-- Lataa kohdedeployin Web/Win-DLL-tiedosto suoraan tooliin (`Assembly.LoadFrom`)
-- TAI tee ristikkäishaku `--xaf-fields`-tulosteesta — Appearance-säännöt
-  joiden `AppearanceItemType="Action"` paljastavat action-ID:n
-  `TargetItems`-attribuutista (esim. `QueryAtpiDataAction` löytyy Henkilo:n
-  appearance-säännöistä).
+```text
+xVasu.Controllers.AsiakasViewController
+  PikaVarausAction              (PopupWindowShowAction)
+  sendSMS                       (SimpleAction)
+  SendEmailAction2              (SimpleAction)
+  AddCustomerInvoice            (PopupWindowShowAction)
+  addNewHakemus                 (SimpleAction)
+xVasu.Controllers.Atpi.AsiakastietoController
+  AsiakastietoOperationChoiceAction  (SingleChoiceAction)  ← ATPI Operaatiot dropdown
+```
+
+Tiskilista paljastaa puolestaan `LisaaRemonttiAction`, `AddYleisEsittelyAction`,
+`AddHuoneistoTapahtumaAction`, `ShowMapAction`, `ShowImagesAction`,
+`ShowVuokraLaskuri` ja `TarkastaTarkastuksenTilaAction`.
+
+Tämä on koko PWA-action-bar -spec — kun toteutamme näkymäkohtaisen action-barin
+PWA:han, käytetään näitä action-ID:itä taustapalvelun endpoint-nimeämiseen ja
+mappaukseen XAF-Controller:in vastaavaan käsittelijään.
 
 ## A0-vaiheen löydökset (vahvistus NAVIGATION.md §3 vasten)
 
