@@ -437,7 +437,7 @@ export class CustomersComponent {
     const c = event.itemData;
     if (!c) return;
     this.customersService.pushRecent(c.id);
-    this.flash(`Asiakkaan tarkka näkymä tulossa: ${c.displayName}`, 'info');
+    this.router.navigate(['/customers', c.id]);
   }
 
   protected openQuickSearch(): void {

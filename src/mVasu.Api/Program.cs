@@ -510,6 +510,20 @@ app.MapGet("/api/customers", async (
                  "Visibility scopes via XPO PermissionPolicy on the user's session.")
     .RequireAuthorization(AccessAsUserPolicy);
 
+app.MapGet("/api/customers/{id:int}", async (
+        ClaimsPrincipal user,
+        ICustomerQueryService service,
+        int id,
+        CancellationToken ct) =>
+    {
+        var dto = await service.GetAsync(user, id, ct);
+        return dto is null ? Results.NotFound() : Results.Ok(dto);
+    })
+    .WithName("GetCustomerById")
+    .WithSummary("Returns the full Asiakas row by AsiakasNumero. 404 when " +
+                 "the row doesn't exist or the caller lacks XPO permission to see it.")
+    .RequireAuthorization(AccessAsUserPolicy);
+
 app.MapGet("/api/search", async (
         ClaimsPrincipal user,
         ISearchService service,

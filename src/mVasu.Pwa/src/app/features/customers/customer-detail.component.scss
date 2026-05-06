@@ -1,0 +1,176 @@
+// Avatar tone selectors live in design/lumo-devextreme-overrides.scss
+// (shared with the customers list row); the page-level layout below
+// is local to this component.
+
+:host {
+  display: block;
+  background: var(--lumo-bg);
+  color: var(--lumo-text-primary);
+  min-height: 100%;
+}
+
+.detail {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--lumo-space-lg);
+  padding-bottom: calc(64px + env(safe-area-inset-bottom) + var(--lumo-space-2xl));
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-lg);
+}
+
+.back {
+  align-self: flex-start;
+  color: var(--lumo-accent);
+  text-decoration: none;
+  font-size: var(--lumo-font-sm);
+
+  &:hover { text-decoration: underline; }
+}
+
+.status,
+.error {
+  margin: var(--lumo-space-2xl) 0;
+  text-align: center;
+  color: var(--lumo-text-secondary);
+}
+.error { color: var(--lumo-warn); }
+
+.hero {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-md);
+}
+
+.avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 22px;
+  background: var(--lumo-surface);
+  color: var(--lumo-text-primary);
+
+  &[data-type='person']         { background: #E0E7FF; color: #1E3A8A; }
+  &[data-type='company']        { background: #FEF3C7; color: #92400E; }
+  &[data-type='contact-person'] { background: #FFE4E6; color: #9F1239; }
+}
+
+.hero-text { flex: 1; min-width: 0; }
+
+.display-name {
+  font-family: var(--lumo-font-serif);
+  font-size: 1.75rem;
+  margin: 0 0 var(--lumo-space-xs);
+  color: var(--lumo-text-primary);
+}
+
+.hero-meta {
+  display: flex;
+  gap: var(--lumo-space-sm);
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: var(--lumo-font-sm);
+  font-weight: 500;
+  background: var(--lumo-surface);
+  color: var(--lumo-text-secondary);
+  border: 1px solid var(--lumo-border);
+
+  &[data-type='person']         { background: #E0E7FF; color: #1E3A8A; border-color: transparent; }
+  &[data-type='company']        { background: #FEF3C7; color: #92400E; border-color: transparent; }
+  &[data-type='contact-person'] { background: #FFE4E6; color: #9F1239; border-color: transparent; }
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: var(--lumo-font-sm);
+  font-weight: 500;
+  background: var(--lumo-surface);
+  color: var(--lumo-text-secondary);
+
+  &[data-tone='cta']  { background: #FCE7F3; color: #9D174D; }
+  &[data-tone='info'] { background: #DBEAFE; color: #1E40AF; }
+  &[data-tone='warn'] { background: #FEF3C7; color: #92400E; }
+}
+
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lumo-space-sm);
+}
+
+.counts--empty .count-empty {
+  font-size: var(--lumo-font-sm);
+  color: var(--lumo-text-secondary);
+}
+
+.count-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lumo-space-xs);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--lumo-surface);
+  font-size: var(--lumo-font-sm);
+
+  &[data-tone='info'] { background: #DBEAFE; color: #1E40AF; }
+  &[data-tone='cta']  { background: #FCE7F3; color: #9D174D; }
+  &[data-tone='navy'] { background: #E0E7FF; color: #1E3A8A; }
+  &[data-tone='warn'] { background: #FEF3C7; color: #92400E; }
+
+  .count-value { font-weight: 600; }
+}
+
+.card {
+  background: var(--lumo-surface);
+  border: 1px solid var(--lumo-border);
+  border-radius: var(--lumo-radius-md);
+  padding: var(--lumo-space-md) var(--lumo-space-lg);
+}
+
+.card-title {
+  font-family: var(--lumo-font-serif);
+  font-size: 1.1rem;
+  margin: 0 0 var(--lumo-space-md);
+  color: var(--lumo-text-primary);
+}
+
+.kv {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  row-gap: var(--lumo-space-xs);
+  column-gap: var(--lumo-space-md);
+  font-size: var(--lumo-font-sm);
+
+  dt { color: var(--lumo-text-secondary); margin: 0; }
+  dd { margin: 0; color: var(--lumo-text-primary); word-break: break-word; }
+
+  a {
+    color: var(--lumo-accent);
+    text-decoration: none;
+    &:hover { text-decoration: underline; }
+  }
+}
+
+@media (max-width: 480px) {
+  .kv {
+    grid-template-columns: 1fr;
+    row-gap: 2px;
+
+    dt { font-size: 12px; margin-top: var(--lumo-space-xs); }
+  }
+}

@@ -62,6 +62,19 @@ export class CustomersApiService {
       .get<CustomersResponseWireDto>(`${this.baseUrl}/api/customers`, { params })
       .pipe(map(response => response.items.map(toCustomer)));
   }
+
+  /**
+   * GET /api/customers/{id}. Returns the same wire shape as a list row;
+   * the detail view today shows the same fields. The id is the
+   * AsiakasNumero (int) — passed as a string here because that's how
+   * the list row carries it; the backend route constraint parses it
+   * back to int.
+   */
+  get(id: string): Observable<Customer> {
+    return this.http
+      .get<CustomerWireDto>(`${this.baseUrl}/api/customers/${encodeURIComponent(id)}`)
+      .pipe(map(toCustomer));
+  }
 }
 
 function toCustomer(c: CustomerWireDto): Customer {
