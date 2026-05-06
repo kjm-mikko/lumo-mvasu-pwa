@@ -85,77 +85,62 @@ public sealed class XpoCustomerQueryService(
             var pageSize = Math.Clamp(defaultPageSize, 1, MaxPageSize);
 
             // Production data has dangling FK targets (AsiakasLuottokysely2,
-            // HakemusAsumisAika) that XPO cannot stub past — XPCollection's
-            // delayed-association load throws CannotLoadObjectsException for
-            // any page that contains such a row, which is most of them.
+            // HakemusAsumisAika) that XPO cannot stub past — any attempt to
+            // hydrate the Asiakas entity (XPCollection.ToList(), or even
+            // GetObjectByKey for an individual row) eager-loads delayed
+            // associations and throws CannotLoadObjectsException when one
+            // of those FK targets is missing.
             //
-            // Workaround: pull the AsiakasNumero list via Session.SelectData
-            // (a key-only SELECT with SQL-level skip/top that does NOT touch
-            // associations), then hydrate each row with GetObjectByKey
-            // wrapped in try/catch so individual broken rows are skipped
-            // instead of blanking the whole page.
-            var skip = 0;
-            var pageNumbers = LoadAsiakasNumberPage(session, criteria, skip, pageSize);
+            // Workaround: project every wire-DTO field via Session.SelectData
+            // — base-class fields from Asiakas, then per-subtype fields
+            // from Henkilo / Yritys / Yhteyshenkilo. Nothing actually loads
+            // an Asiakas entity, so missing FKs on Henkilo.LastOne and
+            // friends are inert.
+            var pageNumbers = LoadAsiakasNumberPage(session, criteria, skip: 0, top: pageSize);
             if (pageNumbers.Count == 0)
             {
                 return Task.FromResult(new CustomersResponseDto(Array.Empty<CustomerDto>(), totalCount));
             }
 
-            var pageRows = new List<Asiakas>(pageNumbers.Count);
-            var skippedDueToBrokenFk = 0;
+            var idArgs = pageNumbers.Cast<object>().ToArray();
+            var baseRows     = LoadAsiakasBaseRows(session, idArgs);
+            var personRows   = LoadHenkiloRows(session, idArgs);
+            var companyRows  = LoadYritysRows(session, idArgs);
+            var contactRows  = LoadYhteyshenkiloRows(session, idArgs);
+            var counts       = LookupCounts(session, idArgs);
+
+            var items = new List<CustomerDto>(pageNumbers.Count);
             foreach (var num in pageNumbers)
             {
+                if (!baseRows.TryGetValue(num, out var baseRow))
+                {
+                    // The page id list came from the same criteria; if the
+                    // base row is missing here it means PermissionPolicy or
+                    // a deletion raced us — skip rather than 500.
+                    continue;
+                }
+
+                CustomerDto? dto = null;
                 try
                 {
-                    var row = session.GetObjectByKey<Asiakas>(num);
-                    if (row is not null)
+                    dto = baseRow.Type switch
                     {
-                        pageRows.Add(row);
-                    }
-                }
-                catch (DevExpress.Xpo.Exceptions.CannotLoadObjectsException)
-                {
-                    skippedDueToBrokenFk++;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex,
-                        "Failed to load Asiakas {AsiakasNumero}; skipping in customers page",
-                        num);
-                }
-            }
-            if (skippedDueToBrokenFk > 0)
-            {
-                logger.LogInformation(
-                    "Skipped {Count} Asiakas rows with broken FK references in customers page",
-                    skippedDueToBrokenFk);
-            }
-            if (pageRows.Count == 0)
-            {
-                return Task.FromResult(new CustomersResponseDto(Array.Empty<CustomerDto>(), totalCount));
-            }
-
-            var asiakasNumbers = pageRows
-                .Select(a => a.AsiakasNumero)
-                .Where(n => n != 0)
-                .Distinct()
-                .Cast<object>()
-                .ToArray();
-
-            var counts = LookupCounts(session, asiakasNumbers);
-
-            var items = new List<CustomerDto>(pageRows.Count);
-            foreach (var row in pageRows)
-            {
-                try
-                {
-                    items.Add(MapDto(row, counts));
+                        CustomerTypes.Person        when personRows.TryGetValue(num, out var p) => MapPerson(num, baseRow, p, counts),
+                        CustomerTypes.Company       when companyRows.TryGetValue(num, out var c) => MapCompany(num, baseRow, c, counts),
+                        CustomerTypes.ContactPerson when contactRows.TryGetValue(num, out var y) => MapContact(num, baseRow, y, counts),
+                        _ => MapFallback(num, baseRow, counts),
+                    };
                 }
                 catch (Exception ex)
                 {
                     logger.LogWarning(ex,
                         "Failed to map Asiakas {AsiakasNumero}; skipping in response",
-                        row.AsiakasNumero);
+                        num);
+                }
+
+                if (dto is not null)
+                {
+                    items.Add(dto);
                 }
             }
 
@@ -290,17 +275,20 @@ public sealed class XpoCustomerQueryService(
     private readonly record struct Counts(
         int Applications, int Reservations, int Contracts, int Offers, int Showings);
 
-    private static Dictionary<int, Counts> LookupCounts(Session session, object[] asiakasNumbers)
+    private Dictionary<int, Counts> LookupCounts(Session session, object[] asiakasNumbers)
     {
         if (asiakasNumbers.Length == 0)
         {
             return new Dictionary<int, Counts>();
         }
 
-        var contracts = LookupContractCounts(session, asiakasNumbers);
-        var applications = LookupApplicationCounts(session, asiakasNumbers);
-        var reservations = LookupReservationCounts(session, asiakasNumbers);
-        var showings = LookupShowingCounts(session, asiakasNumbers);
+        // Each lookup is independently wrapped — if one source has a
+        // broken-FK row in the page's range we log it and return zero
+        // for that dimension instead of failing the whole response.
+        var contracts    = SafeLookupCount("contract",     () => LookupContractCounts(session, asiakasNumbers));
+        var applications = SafeLookupCount("application",  () => LookupApplicationCounts(session, asiakasNumbers));
+        var reservations = SafeLookupCount("reservation",  () => LookupReservationCounts(session, asiakasNumbers));
+        var showings     = SafeLookupCount("showing",      () => LookupShowingCounts(session, asiakasNumbers));
 
         var keys = contracts.Keys
             .Concat(applications.Keys)
@@ -322,6 +310,21 @@ public sealed class XpoCustomerQueryService(
                 Showings:     showings.GetValueOrDefault(k));
         }
         return result;
+    }
+
+    private Dictionary<int, int> SafeLookupCount(string label, Func<Dictionary<int, int>> source)
+    {
+        try
+        {
+            return source();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Customers count lookup failed for {Source}; treating as zero",
+                label);
+            return new Dictionary<int, int>();
+        }
     }
 
     private static Dictionary<int, int> LookupContractCounts(Session session, object[] asiakasNumbers)
@@ -387,53 +390,256 @@ public sealed class XpoCustomerQueryService(
         return result;
     }
 
-    // -- mapping ----------------------------------------------------------
+    // -- row projections --------------------------------------------------
 
-    private static CustomerDto MapDto(Asiakas a, Dictionary<int, Counts> counts)
+    /// <summary>
+    /// Asiakas base-class fields projected into a flat record that's safe
+    /// to read without ever touching a delayed association. The Type
+    /// discriminator is derived from <c>OnHenkilo</c>/<c>OnYritys</c>
+    /// alias columns so we don't need <c>ObjectType.TypeName</c> string
+    /// matching on the wire.
+    /// </summary>
+    private readonly record struct AsiakasBaseRow(
+        string Type,
+        string? SukuNimi,
+        string? KatuOsoite,
+        string? PostiToimiPaikka,
+        string? Email,
+        string? Gsm,
+        string? Puhelin);
+
+    private readonly record struct PersonRow(string? EtuNimi, string? SukuNimi);
+    private readonly record struct CompanyRow(string? CompanyID, string? Name);
+    private readonly record struct ContactRow(
+        string? EtuNimi,
+        string? SukuNimi,
+        int? ParentAsiakasNumero,
+        string? ParentCompanyName);
+
+    private static Dictionary<int, AsiakasBaseRow> LoadAsiakasBaseRows(Session session, object[] asiakasNumbers)
     {
-        var snapshot = counts.GetValueOrDefault(a.AsiakasNumero);
-        var (type, displayName) = DiscriminateAndName(a);
-        var initials = ComputeInitials(a, type);
+        var classInfo = session.GetClassInfo(typeof(Asiakas));
+        var props = new CriteriaOperatorCollection
+        {
+            new OperandProperty("AsiakasNumero"),
+            new OperandProperty("OnHenkilo"),
+            new OperandProperty("OnYritys"),
+            new OperandProperty("SukuNimi"),
+            new OperandProperty("KatuOsoite"),
+            new OperandProperty("PostiToimiPaikka"),
+            new OperandProperty("Email"),
+            new OperandProperty("Gsm"),
+            new OperandProperty("Puhelin"),
+        };
+        var criteria = new InOperator("AsiakasNumero", asiakasNumbers);
+        var rows = session.SelectData(
+            classInfo, props, criteria,
+            selectDeleted: false,
+            topSelectedRecords: int.MaxValue,
+            sorting: new SortingCollection());
 
-        return new CustomerDto(
-            Id: a.AsiakasNumero.ToString(CultureInfo.InvariantCulture),
-            Type: type,
-            DisplayName: displayName,
-            Initials: initials,
-            Counts: new CustomerCountsDto(
-                Applications: snapshot.Applications,
-                Reservations: snapshot.Reservations,
-                Contracts:    snapshot.Contracts,
-                Offers:       snapshot.Offers,
-                Showings:     snapshot.Showings),
-            PrimaryAddress: NullIfBlank(a.KatuOsoite),
-            City:           NullIfBlank(a.PostiToimiPaikka),
-            Tag:            null,
-            Phone:          NullIfBlank(a.Gsm) ?? NullIfBlank(a.Puhelin),
-            Email:          NullIfBlank(a.Email),
-            FirstName:       type == CustomerTypes.Person        ? ((Henkilo)a).EtuNimi
-                          :  type == CustomerTypes.ContactPerson ? ((Yhteyshenkilo)a).EtuNimi
-                          :  null,
-            LastName:        type == CustomerTypes.Person        ? ((Henkilo)a).SukuNimi
-                          :  type == CustomerTypes.ContactPerson ? ((Yhteyshenkilo)a).SukuNimi
-                          :  null,
-            CompanyName:     type == CustomerTypes.Company       ? ((Yritys)a).SukuNimi : null,
-            BusinessId:      type == CustomerTypes.Company       ? NullIfBlank(((Yritys)a).CompanyID) : null,
-            ParentCompanyId: type == CustomerTypes.ContactPerson
-                                ? ((Yhteyshenkilo)a).Yritys?.AsiakasNumero.ToString(CultureInfo.InvariantCulture)
-                                : null,
-            ParentCompanyName: type == CustomerTypes.ContactPerson
-                                ? NullIfBlank(((Yhteyshenkilo)a).Yritys?.SukuNimi)
-                                : null);
+        var result = new Dictionary<int, AsiakasBaseRow>(rows.Count);
+        foreach (var row in rows)
+        {
+            var num = ToInt(row[0]);
+            if (num is null) continue;
+
+            var onHenkilo = ToBoolish(row[1]);
+            var onYritys  = ToBoolish(row[2]);
+            var type = onHenkilo ? CustomerTypes.Person
+                     : onYritys  ? CustomerTypes.Company
+                     : CustomerTypes.ContactPerson;
+
+            result[num.Value] = new AsiakasBaseRow(
+                Type: type,
+                SukuNimi:         row[3] as string,
+                KatuOsoite:       row[4] as string,
+                PostiToimiPaikka: row[5] as string,
+                Email:            row[6] as string,
+                Gsm:              row[7] as string,
+                Puhelin:          row[8] as string);
+        }
+        return result;
     }
 
-    private static (string Type, string DisplayName) DiscriminateAndName(Asiakas a) => a switch
+    private static Dictionary<int, PersonRow> LoadHenkiloRows(Session session, object[] asiakasNumbers)
     {
-        Henkilo h        => (CustomerTypes.Person,        BuildPersonDisplayName(h.SukuNimi, h.EtuNimi, h.Name)),
-        Yritys y         => (CustomerTypes.Company,       NullIfBlank(y.SukuNimi) ?? NullIfBlank(y.Name) ?? "(nimetön yritys)"),
-        Yhteyshenkilo yh => (CustomerTypes.ContactPerson, BuildPersonDisplayName(yh.SukuNimi, yh.EtuNimi, yh.Name)),
-        _                => (CustomerTypes.Person,        NullIfBlank(a.Name) ?? "(nimetön)"),
-    };
+        var classInfo = session.GetClassInfo(typeof(Henkilo));
+        var props = new CriteriaOperatorCollection
+        {
+            new OperandProperty("AsiakasNumero"),
+            new OperandProperty("EtuNimi"),
+            new OperandProperty("SukuNimi"),
+        };
+        var rows = session.SelectData(
+            classInfo, props,
+            new InOperator("AsiakasNumero", asiakasNumbers),
+            selectDeleted: false,
+            topSelectedRecords: int.MaxValue,
+            sorting: new SortingCollection());
+
+        var result = new Dictionary<int, PersonRow>(rows.Count);
+        foreach (var row in rows)
+        {
+            var num = ToInt(row[0]);
+            if (num is null) continue;
+            result[num.Value] = new PersonRow(row[1] as string, row[2] as string);
+        }
+        return result;
+    }
+
+    private static Dictionary<int, CompanyRow> LoadYritysRows(Session session, object[] asiakasNumbers)
+    {
+        var classInfo = session.GetClassInfo(typeof(Yritys));
+        var props = new CriteriaOperatorCollection
+        {
+            new OperandProperty("AsiakasNumero"),
+            new OperandProperty("CompanyID"),
+            new OperandProperty("SukuNimi"),
+        };
+        var rows = session.SelectData(
+            classInfo, props,
+            new InOperator("AsiakasNumero", asiakasNumbers),
+            selectDeleted: false,
+            topSelectedRecords: int.MaxValue,
+            sorting: new SortingCollection());
+
+        var result = new Dictionary<int, CompanyRow>(rows.Count);
+        foreach (var row in rows)
+        {
+            var num = ToInt(row[0]);
+            if (num is null) continue;
+            // Yritysnimi is an XPO alias over SukuNimi — the underlying
+            // column is the same, so we read SukuNimi here.
+            result[num.Value] = new CompanyRow(row[1] as string, row[2] as string);
+        }
+        return result;
+    }
+
+    private static Dictionary<int, ContactRow> LoadYhteyshenkiloRows(Session session, object[] asiakasNumbers)
+    {
+        var classInfo = session.GetClassInfo(typeof(Yhteyshenkilo));
+        var props = new CriteriaOperatorCollection
+        {
+            new OperandProperty("AsiakasNumero"),
+            new OperandProperty("EtuNimi"),
+            new OperandProperty("SukuNimi"),
+            // Navigation-property projection — XPO emits a LEFT JOIN so a
+            // dangling Yritys FK comes back as null instead of throwing.
+            new OperandProperty("Yritys.AsiakasNumero"),
+            new OperandProperty("Yritys.SukuNimi"),
+        };
+        var rows = session.SelectData(
+            classInfo, props,
+            new InOperator("AsiakasNumero", asiakasNumbers),
+            selectDeleted: false,
+            topSelectedRecords: int.MaxValue,
+            sorting: new SortingCollection());
+
+        var result = new Dictionary<int, ContactRow>(rows.Count);
+        foreach (var row in rows)
+        {
+            var num = ToInt(row[0]);
+            if (num is null) continue;
+            result[num.Value] = new ContactRow(
+                EtuNimi:             row[1] as string,
+                SukuNimi:            row[2] as string,
+                ParentAsiakasNumero: ToInt(row[3]),
+                ParentCompanyName:   row[4] as string);
+        }
+        return result;
+    }
+
+    // -- mapping ----------------------------------------------------------
+
+    private static CustomerDto MapPerson(int asiakasNumero, AsiakasBaseRow b, PersonRow p,
+                                          Dictionary<int, Counts> counts)
+    {
+        var lastName = NullIfBlank(p.SukuNimi) ?? NullIfBlank(b.SukuNimi);
+        var firstName = NullIfBlank(p.EtuNimi);
+        return BuildPersonDto(asiakasNumero, CustomerTypes.Person, b, counts,
+            firstName: firstName, lastName: lastName,
+            parentCompanyId: null, parentCompanyName: null);
+    }
+
+    private static CustomerDto MapContact(int asiakasNumero, AsiakasBaseRow b, ContactRow y,
+                                           Dictionary<int, Counts> counts)
+    {
+        var lastName = NullIfBlank(y.SukuNimi) ?? NullIfBlank(b.SukuNimi);
+        var firstName = NullIfBlank(y.EtuNimi);
+        return BuildPersonDto(asiakasNumero, CustomerTypes.ContactPerson, b, counts,
+            firstName: firstName, lastName: lastName,
+            parentCompanyId: y.ParentAsiakasNumero?.ToString(CultureInfo.InvariantCulture),
+            parentCompanyName: NullIfBlank(y.ParentCompanyName));
+    }
+
+    private static CustomerDto MapCompany(int asiakasNumero, AsiakasBaseRow b, CompanyRow c,
+                                           Dictionary<int, Counts> counts)
+    {
+        var snapshot = counts.GetValueOrDefault(asiakasNumero);
+        var displayName = NullIfBlank(c.Name) ?? NullIfBlank(b.SukuNimi) ?? "(nimetön yritys)";
+        return new CustomerDto(
+            Id: asiakasNumero.ToString(CultureInfo.InvariantCulture),
+            Type: CustomerTypes.Company,
+            DisplayName: displayName,
+            Initials: CompanyInitials(displayName),
+            Counts: new CustomerCountsDto(
+                snapshot.Applications, snapshot.Reservations,
+                snapshot.Contracts, snapshot.Offers, snapshot.Showings),
+            PrimaryAddress: NullIfBlank(b.KatuOsoite),
+            City:           NullIfBlank(b.PostiToimiPaikka),
+            Tag:            null,
+            Phone:          NullIfBlank(b.Gsm) ?? NullIfBlank(b.Puhelin),
+            Email:          NullIfBlank(b.Email),
+            FirstName:       null,
+            LastName:        null,
+            CompanyName:     displayName,
+            BusinessId:      NullIfBlank(c.CompanyID),
+            ParentCompanyId: null,
+            ParentCompanyName: null);
+    }
+
+    /// <summary>
+    /// Last-resort mapping when the per-subtype row is missing — we fall
+    /// back to whatever the Asiakas base row has. Mostly defensive: the
+    /// page numbers came from the same query, so the subtype row should
+    /// be present.
+    /// </summary>
+    private static CustomerDto MapFallback(int asiakasNumero, AsiakasBaseRow b,
+                                            Dictionary<int, Counts> counts)
+    {
+        return BuildPersonDto(asiakasNumero, b.Type, b, counts,
+            firstName: null, lastName: NullIfBlank(b.SukuNimi),
+            parentCompanyId: null, parentCompanyName: null);
+    }
+
+    private static CustomerDto BuildPersonDto(int asiakasNumero, string type, AsiakasBaseRow b,
+                                               Dictionary<int, Counts> counts,
+                                               string? firstName, string? lastName,
+                                               string? parentCompanyId, string? parentCompanyName)
+    {
+        var snapshot = counts.GetValueOrDefault(asiakasNumero);
+        var displayName = BuildPersonDisplayName(lastName, firstName, b.SukuNimi);
+        return new CustomerDto(
+            Id: asiakasNumero.ToString(CultureInfo.InvariantCulture),
+            Type: type,
+            DisplayName: displayName,
+            Initials: Letters(lastName, firstName),
+            Counts: new CustomerCountsDto(
+                snapshot.Applications, snapshot.Reservations,
+                snapshot.Contracts, snapshot.Offers, snapshot.Showings),
+            PrimaryAddress: NullIfBlank(b.KatuOsoite),
+            City:           NullIfBlank(b.PostiToimiPaikka),
+            Tag:            null,
+            Phone:          NullIfBlank(b.Gsm) ?? NullIfBlank(b.Puhelin),
+            Email:          NullIfBlank(b.Email),
+            FirstName: firstName,
+            LastName:  lastName,
+            CompanyName: null,
+            BusinessId:  null,
+            ParentCompanyId:   parentCompanyId,
+            ParentCompanyName: parentCompanyName);
+    }
 
     private static string BuildPersonDisplayName(string? lastName, string? firstName, string? fallback)
     {
@@ -443,20 +649,6 @@ public sealed class XpoCustomerQueryService(
         if (ln.Length > 0) return ln;
         if (fn.Length > 0) return fn;
         return NullIfBlank(fallback) ?? "(nimetön)";
-    }
-
-    private static string ComputeInitials(Asiakas a, string type)
-    {
-        return type switch
-        {
-            CustomerTypes.Person =>
-                Letters(((Henkilo)a).SukuNimi, ((Henkilo)a).EtuNimi),
-            CustomerTypes.ContactPerson =>
-                Letters(((Yhteyshenkilo)a).SukuNimi, ((Yhteyshenkilo)a).EtuNimi),
-            CustomerTypes.Company =>
-                CompanyInitials(((Yritys)a).SukuNimi ?? a.Name),
-            _ => "?",
-        };
     }
 
     private static string Letters(string? lastName, string? firstName)
@@ -486,6 +678,37 @@ public sealed class XpoCustomerQueryService(
 
     private static string? NullIfBlank(string? s) =>
         string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    /// <summary>Coerces SelectData scalar cells to int? regardless of source type.</summary>
+    private static int? ToInt(object? value) => value switch
+    {
+        null            => null,
+        int i           => i,
+        long l          => unchecked((int)l),
+        short s         => s,
+        byte b          => b,
+        decimal d       => unchecked((int)d),
+        IConvertible cv => cv.ToInt32(CultureInfo.InvariantCulture),
+        _               => null,
+    };
+
+    /// <summary>
+    /// XPO returns IIF-derived alias columns (OnHenkilo, OnYritys) as
+    /// "0"/"1" strings, ints, or actual booleans depending on driver.
+    /// Treat truthy values uniformly.
+    /// </summary>
+    private static bool ToBoolish(object? value) => value switch
+    {
+        null            => false,
+        bool b          => b,
+        int i           => i != 0,
+        long l          => l != 0,
+        short s         => s != 0,
+        byte by         => by != 0,
+        string str      => str.Length > 0 && str != "0" && !string.Equals(str, "false", StringComparison.OrdinalIgnoreCase),
+        IConvertible cv => cv.ToInt32(CultureInfo.InvariantCulture) != 0,
+        _               => false,
+    };
 
     // -- helpers ----------------------------------------------------------
 
