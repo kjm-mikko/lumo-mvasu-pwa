@@ -142,14 +142,19 @@ public class TiskilistaEndpointTests : IClassFixture<AuthenticatedWebApplication
             DetailResult = new TiskilistaDetailDto(
                 Id: id,
                 Osoite: "Mannerheimintie 1",
+                Kptunnus: 10086,
+                Huonetunnus: 1024,
                 Postinumero: "00100",
                 Postitoimipaikka: "Helsinki",
                 Tyyppi: "2H+K",
+                Laji: "Asuinhuoneisto",
                 Vuokra: 950,
                 Vapautuu: DateTimeOffset.Now.AddDays(30),
                 Poismuutto: null,
+                VapautuuAsiakkaalta: null,
                 RemonttiAlkaa: null,
                 RemonttiPaattyy: null,
+                Remonttityyppi: null,
                 Neliot: 47.5f,
                 Kerros: "3",
                 Kerroksia: "5",
@@ -158,12 +163,18 @@ public class TiskilistaEndpointTests : IClassFixture<AuthenticatedWebApplication
                 Kunta: "Helsinki",
                 Kaupunginosa: "Kamppi",
                 Markkinointialue: null,
+                Prio: null,
+                Isannoitsija: null,
+                Markkinoija: null,
+                TarkastusTila: null,
                 LumoFi: true,
                 Vuokraovi: true,
                 OnKuvausTarve: false,
                 Muistio: null,
+                HuoneistoMuistio: null,
                 Kuvaus: null,
                 LisaTieto: null,
+                BrochureUrl: null,
                 Hissi: true,
                 Parveke: false,
                 Sauna: false,
@@ -172,8 +183,10 @@ public class TiskilistaEndpointTests : IClassFixture<AuthenticatedWebApplication
                 Pesula: false,
                 Astianpesukone: true,
                 Aluetoimisto: "Helsinki",
+                NextEsittelyAt: null,
                 Latitude: 60.17,
                 Longitude: 24.93,
+                DistanceKm: null,
                 LumoUrl: null),
         };
         var client = WithMock(mock).CreateClient();
@@ -231,6 +244,8 @@ public class TiskilistaEndpointTests : IClassFixture<AuthenticatedWebApplication
         public Task<TiskilistaDetailDto?> GetAsync(
             ClaimsPrincipal principal,
             Guid id,
+            double? userLat = null,
+            double? userLon = null,
             CancellationToken cancellationToken = default)
         {
             LastDetailId = id;
@@ -240,8 +255,9 @@ public class TiskilistaEndpointTests : IClassFixture<AuthenticatedWebApplication
         public TiskilistaDistinctValuesDto? DistinctValuesResult { get; set; } =
             new TiskilistaDistinctValuesDto(
                 Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
+                Array.Empty<string>(), Array.Empty<TiskilistaKuntaKaupunginosaDto>(),
                 Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
-                Array.Empty<string>(), Array.Empty<string>());
+                Array.Empty<string>());
 
         public Task<TiskilistaDistinctValuesDto?> GetDistinctValuesAsync(
             ClaimsPrincipal principal,

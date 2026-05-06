@@ -11,7 +11,18 @@ public sealed record TiskilistaDistinctValuesDto(
     IReadOnlyList<string> Tyypit,
     IReadOnlyList<string> Kunnat,
     IReadOnlyList<string> Kaupunginosat,
+    IReadOnlyList<TiskilistaKuntaKaupunginosaDto> KaupunginosatByKunta,
     IReadOnlyList<string> Sopimustilat,
     IReadOnlyList<string> Isannoitsijat,
     IReadOnlyList<string> Markkinoijat,
     IReadOnlyList<string> Tilat);
+
+/// <summary>
+/// Distinct (kunta, kaupunginosa) pair so the PWA can scope the
+/// Kaupunginosa multi-select dropdown to the kunta the user already
+/// selected. Sent in addition to the flat Kaupunginosat list so the
+/// "no kunta selected" case still has every district available.
+/// </summary>
+public sealed record TiskilistaKuntaKaupunginosaDto(
+    string Kunta,
+    string Kaupunginosa);

@@ -3,6 +3,8 @@ namespace mVasu.Api.Contracts;
 public sealed record TiskilistaDetailDto(
     Guid Id,
     string Osoite,
+    int? Kptunnus,
+    int? Huonetunnus,
     string? Postinumero,
     string? Postitoimipaikka,
     string? Tyyppi,
@@ -13,6 +15,7 @@ public sealed record TiskilistaDetailDto(
     DateTimeOffset? VapautuuAsiakkaalta,
     DateTimeOffset? RemonttiAlkaa,
     DateTimeOffset? RemonttiPaattyy,
+    string? Remonttityyppi,
     float? Neliot,
     string? Kerros,
     string? Kerroksia,
@@ -41,6 +44,8 @@ public sealed record TiskilistaDetailDto(
     bool Pesula,
     bool Astianpesukone,
     string? Aluetoimisto,
+    DateTimeOffset? NextEsittelyAt,
     double? Latitude,
     double? Longitude,
+    double? DistanceKm,
     string? LumoUrl);

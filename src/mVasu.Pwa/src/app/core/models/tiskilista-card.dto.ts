@@ -28,6 +28,7 @@ export interface TiskilistaCardDto {
   readonly hissi: boolean;
   readonly parveke: boolean;
   readonly sauna: boolean;
+  readonly nextEsittelyAt: string | null;
   readonly latitude: number | null;
   readonly longitude: number | null;
   readonly distanceKm: number | null;

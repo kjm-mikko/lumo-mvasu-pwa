@@ -6,6 +6,7 @@ using DevExpress.Xpo;
 using mVasu.Api.Authentication;
 using mVasu.Api.Contracts;
 using xVasu.Data.Security;
+using XpoShowing = xVasu.Data.Kire.HuoneistoEsittelyTiedot;
 using XpoTiskilista = xVasu.Data.Asutus.Tiskilista;
 
 namespace mVasu.Api.Tiskilista;
@@ -20,6 +21,14 @@ public sealed class TiskilistaQueryService(
     IObjectSpaceProvider objectSpaceProvider,
     ILogger<TiskilistaQueryService> logger) : ITiskilistaQueryService
 {
+    private static readonly TimeZoneInfo HelsinkiTz = ResolveHelsinkiTimeZone();
+
+    private static TimeZoneInfo ResolveHelsinkiTimeZone()
+    {
+        try { return TimeZoneInfo.FindSystemTimeZoneById("Europe/Helsinki"); }
+        catch { return TimeZoneInfo.FindSystemTimeZoneById("FLE Standard Time"); }
+    }
+
     public Task<TiskilistaPageDto?> ListAsync(
         ClaimsPrincipal principal,
         TiskilistaListQuery query,
@@ -49,8 +58,10 @@ public sealed class TiskilistaQueryService(
 
                 var total = ranked.Count;
                 var skipped = (query.Page - 1) * query.PageSize;
-                var paged = ranked.Skip(skipped).Take(query.PageSize)
-                    .Select(r => MapCard(r.Row, r.Distance))
+                var pageRows = ranked.Skip(skipped).Take(query.PageSize).ToList();
+                var distanceUpcoming = LookupUpcomingShowings(session, CollectHuoneistoOids(pageRows.Select(r => r.Row)));
+                var paged = pageRows
+                    .Select(r => MapCard(r.Row, r.Distance, distanceUpcoming))
                     .ToList();
 
                 return Task.FromResult<TiskilistaPageDto?>(
@@ -70,8 +81,10 @@ public sealed class TiskilistaQueryService(
                 collection.Sorting.Add(sp);
             }
 
-            var items = collection
-                .Select(t => MapCard(t, ComputeDistanceFor(t, query)))
+            var pageList = collection.ToList();
+            var upcoming = LookupUpcomingShowings(session, CollectHuoneistoOids(pageList));
+            var items = pageList
+                .Select(t => MapCard(t, ComputeDistanceFor(t, query), upcoming))
                 .ToList();
 
             return Task.FromResult<TiskilistaPageDto?>(
@@ -117,6 +130,7 @@ public sealed class TiskilistaQueryService(
                 Tyypit: DistinctSorted(rows, t => t.tyyppi),
                 Kunnat: DistinctSorted(rows, t => t.kunta),
                 Kaupunginosat: DistinctSorted(rows, t => t.KuntaAlue),
+                KaupunginosatByKunta: DistinctKuntaKaupunginosaPairs(rows),
                 Sopimustilat: DistinctSorted(rows, t => t.SopimusTila),
                 Isannoitsijat: DistinctSorted(rows, t => t.Isannoitsija),
                 Markkinoijat: DistinctSorted(rows, t => t.Markkinoija),
@@ -126,6 +140,19 @@ public sealed class TiskilistaQueryService(
         {
             os.Dispose();
         }
+    }
+
+    private static IReadOnlyList<TiskilistaKuntaKaupunginosaDto> DistinctKuntaKaupunginosaPairs(
+        XpoTiskilista[] rows)
+    {
+        var fi = StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("fi-FI"), ignoreCase: true);
+        return rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.kunta) && !string.IsNullOrWhiteSpace(r.KuntaAlue))
+            .Select(r => new TiskilistaKuntaKaupunginosaDto(r.kunta!.Trim(), r.KuntaAlue!.Trim()))
+            .DistinctBy(p => $"{p.Kunta}|{p.Kaupunginosa}", StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p.Kunta, fi)
+            .ThenBy(p => p.Kaupunginosa, fi)
+            .ToArray();
     }
 
     private static IReadOnlyList<string> DistinctSorted(
@@ -140,6 +167,8 @@ public sealed class TiskilistaQueryService(
     public Task<TiskilistaDetailDto?> GetAsync(
         ClaimsPrincipal principal,
         Guid id,
+        double? userLat = null,
+        double? userLon = null,
         CancellationToken cancellationToken = default)
     {
         var (user, os) = ResolveUser(principal);
@@ -150,8 +179,46 @@ public sealed class TiskilistaQueryService(
 
         try
         {
-            var row = os.GetObjectByKey<XpoTiskilista>(id);
-            return Task.FromResult(row is null ? null : MapDetail(row));
+            XpoTiskilista? row;
+            try
+            {
+                row = os.GetObjectByKey<XpoTiskilista>(id);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Tiskilista {Id} failed to load — XPO threw on GetObjectByKey", id);
+                return Task.FromResult<TiskilistaDetailDto?>(null);
+            }
+
+            if (row is null) return Task.FromResult<TiskilistaDetailDto?>(null);
+
+            var session = ((XPObjectSpace)os).Session;
+            var upcoming = LookupUpcomingShowings(session, CollectHuoneistoOids(new[] { row }));
+            var distanceKm = userLat.HasValue && userLon.HasValue
+                ? ComputeDistanceKm(userLat.Value, userLon.Value, row.Latitude, row.Longitude)
+                : null;
+
+            try
+            {
+                return Task.FromResult<TiskilistaDetailDto?>(MapDetail(row, upcoming, distanceKm));
+            }
+            catch (Exception ex)
+            {
+                // Live data has dangling FK targets that crash eager XPO loads
+                // (CannotLoadObjectsException, etc.). Fall back to a minimal
+                // mapping that only reads fields directly on Tiskilista — the
+                // user gets *something* rather than a hard 500.
+                logger.LogWarning(ex, "Tiskilista {Id} full-detail mapping failed; falling back to minimal", id);
+                try
+                {
+                    return Task.FromResult<TiskilistaDetailDto?>(MapDetailMinimal(row, upcoming, distanceKm));
+                }
+                catch (Exception minimalEx)
+                {
+                    logger.LogError(minimalEx, "Tiskilista {Id} minimal mapping also failed", id);
+                    return Task.FromResult<TiskilistaDetailDto?>(null);
+                }
+            }
         }
         finally
         {
@@ -227,9 +294,25 @@ public sealed class TiskilistaQueryService(
             // lives on the linked Huoneisto, not on Tiskilista itself.
             operands.Add(new BinaryOperator("Huoneisto.OnKuvausTarve", true, BinaryOperatorType.Equal));
         }
+        if (query.HasUpcomingEsittelyOnly == true)
+        {
+            // Surface only rows whose Huoneisto has at least one upcoming
+            // (non-cancelled, non-handled) showing. Walks Huoneisto.Esittelyt.
+            var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HelsinkiTz);
+            operands.Add(new ContainsOperator("Huoneisto.Esittelyt",
+                CriteriaOperator.And(
+                    new BinaryOperator("EsittelyCancelled", false),
+                    new BinaryOperator("EsittelyHandled", false),
+                    new BinaryOperator("SystemCancelled", false),
+                    new BinaryOperator("EsittelyAika", nowLocal, BinaryOperatorType.GreaterOrEqual))));
+        }
         if (query.LumoFiOnly == true)
         {
-            operands.Add(new BinaryOperator("InternetMarkkinointi", true, BinaryOperatorType.Equal));
+            // Model.xafml uses Huoneisto.LumoOneEnabled for the "Lumo.fi" flag
+            // — that's the canonical "published on Lumo.fi" boolean. The local
+            // Tiskilista.InternetMarkkinointi is a broader "internet marketing
+            // consent" flag that doesn't always coincide with Lumo.fi listing.
+            operands.Add(new BinaryOperator("Huoneisto.LumoOneEnabled", true, BinaryOperatorType.Equal));
         }
 
         if (query.NeliotMin is { } neliotMin)
@@ -293,6 +376,57 @@ public sealed class TiskilistaQueryService(
         _ => [new SortProperty("vapautuu", DevExpress.Xpo.DB.SortingDirection.Ascending)],
     };
 
+    private static IEnumerable<Guid> CollectHuoneistoOids(IEnumerable<XpoTiskilista> rows)
+    {
+        foreach (var t in rows)
+        {
+            Guid? oid = null;
+            try { oid = t.Huoneisto?.OID; }
+            catch { /* dangling FK on Huoneisto — skip */ }
+            if (oid.HasValue) yield return oid.Value;
+        }
+    }
+
+    /// <summary>
+    /// Pre-loads the next upcoming (non-cancelled, non-handled) showing for a
+    /// batch of Huoneisto OIDs in a single XPO query. Used so MapCard can
+    /// surface "Esittely tulossa" without firing one query per row.
+    /// </summary>
+    private static IDictionary<Guid, DateTime> LookupUpcomingShowings(
+        Session session, IEnumerable<Guid> huoneistoOids)
+    {
+        var oidArr = huoneistoOids.Distinct().Cast<object>().ToArray();
+        var result = new Dictionary<Guid, DateTime>();
+        if (oidArr.Length == 0) return result;
+
+        var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HelsinkiTz);
+        var criteria = CriteriaOperator.And(
+            new InOperator("Huoneisto.OID", oidArr),
+            new BinaryOperator("EsittelyCancelled", false),
+            new BinaryOperator("EsittelyHandled", false),
+            new BinaryOperator("SystemCancelled", false),
+            new BinaryOperator("EsittelyAika", nowLocal, BinaryOperatorType.GreaterOrEqual));
+
+        try
+        {
+            var collection = new XPCollection<XpoShowing>(session, criteria);
+            foreach (var s in collection)
+            {
+                var hOid = s.Huoneisto?.OID;
+                if (hOid is null) continue;
+                if (!result.TryGetValue(hOid.Value, out var existing) || s.EsittelyAika < existing)
+                {
+                    result[hOid.Value] = s.EsittelyAika;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Live data referential issues — return what we have so far.
+        }
+        return result;
+    }
+
     private static double? ComputeDistanceFor(XpoTiskilista row, TiskilistaListQuery query) =>
         query.UserLat.HasValue && query.UserLon.HasValue
             ? ComputeDistanceKm(query.UserLat.Value, query.UserLon.Value, row.Latitude, row.Longitude)
@@ -317,7 +451,8 @@ public sealed class TiskilistaQueryService(
     private static DateTimeOffset? ToOffset(DateTime value) =>
         value == default ? null : new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Local));
 
-    private static TiskilistaCardDto MapCard(XpoTiskilista t, double? distanceKm) => new(
+    private static TiskilistaCardDto MapCard(
+        XpoTiskilista t, double? distanceKm, IDictionary<Guid, DateTime> upcoming) => new(
         Id: t.OID,
         Osoite: t.katuosoite ?? string.Empty,
         Kptunnus: t.kptunnus == 0 ? null : t.kptunnus,
@@ -336,22 +471,45 @@ public sealed class TiskilistaQueryService(
         Prio: NormaliseString(t.Huoneisto?.SAP_Palveluluokka),
         Isannoitsija: NormaliseString(t.Isannoitsija),
         Markkinoija: NormaliseString(t.Markkinoija),
-        LumoFi: t.InternetMarkkinointi,
+        // Lumo.fi is the canonical Huoneisto.LumoOneEnabled flag (XAF
+        // ListView column 0). Tiskilista.InternetMarkkinointi is a broader
+        // "marketing consent" flag and does not match the Lumo.fi semantics.
+        LumoFi: t.Huoneisto?.LumoOneEnabled ?? false,
         Vuokraovi: t.Vuokraovi,
         OnKuvausTarve: t.Huoneisto?.OnKuvausTarve ?? false,
         Hissi: t.hissi,
         Parveke: t.parveke,
         Sauna: t.sauna,
+        NextEsittelyAt: NextEsittelyFor(t, upcoming),
         Latitude: t.Latitude == 0 ? null : t.Latitude,
         Longitude: t.Longitude == 0 ? null : t.Longitude,
         DistanceKm: distanceKm);
 
+    private static DateTimeOffset? NextEsittelyFor(
+        XpoTiskilista t, IDictionary<Guid, DateTime> upcoming)
+    {
+        try
+        {
+            var hOid = t.Huoneisto?.OID;
+            return hOid is null
+                ? null
+                : (upcoming.TryGetValue(hOid.Value, out var next) ? ToOffset(next) : null);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string? NormaliseString(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;
 
-    private static TiskilistaDetailDto MapDetail(XpoTiskilista t) => new(
+    private static TiskilistaDetailDto MapDetail(
+        XpoTiskilista t, IDictionary<Guid, DateTime> upcoming, double? distanceKm) => new(
         Id: t.OID,
         Osoite: t.katuosoite ?? string.Empty,
+        Kptunnus: t.kptunnus == 0 ? null : t.kptunnus,
+        Huonetunnus: t.huonetunnus == 0 ? null : t.huonetunnus,
         Postinumero: t.Postinumero,
         Postitoimipaikka: t.Postitoimipaikka,
         Tyyppi: t.tyyppi,
@@ -362,6 +520,7 @@ public sealed class TiskilistaQueryService(
         VapautuuAsiakkaalta: ToOffset(t.VapautuuAsiakkaalta),
         RemonttiAlkaa: ToOffset(t.RemontinAlkamispaiva),
         RemonttiPaattyy: ToOffset(t.RemontinPaattymispaiva),
+        Remonttityyppi: NormaliseString(t.Remonttityyppi),
         Neliot: t.neliot,
         Kerros: t.kerros,
         Kerroksia: t.kerroksia,
@@ -374,7 +533,8 @@ public sealed class TiskilistaQueryService(
         Isannoitsija: NormaliseString(t.Isannoitsija),
         Markkinoija: NormaliseString(t.Markkinoija),
         TarkastusTila: ResolveTarkastusTila(t),
-        LumoFi: t.InternetMarkkinointi,
+        // Match XAF Model.xafml — Lumo.fi flag is Huoneisto.LumoOneEnabled.
+        LumoFi: t.Huoneisto?.LumoOneEnabled ?? false,
         Vuokraovi: t.Vuokraovi,
         OnKuvausTarve: t.Huoneisto?.OnKuvausTarve ?? false,
         Muistio: t.muistio,
@@ -390,8 +550,10 @@ public sealed class TiskilistaQueryService(
         Pesula: t.pesula,
         Astianpesukone: t.astianpesukone,
         Aluetoimisto: t.Aluetoimisto,
+        NextEsittelyAt: NextEsittelyFor(t, upcoming),
         Latitude: t.Latitude == 0 ? null : t.Latitude,
         Longitude: t.Longitude == 0 ? null : t.Longitude,
+        DistanceKm: distanceKm,
         LumoUrl: t.Huoneisto?.LumoUrl);
 
     private static string? ResolveTarkastusTila(XpoTiskilista t)
@@ -408,4 +570,62 @@ public sealed class TiskilistaQueryService(
             return null;
         }
     }
+
+    /// <summary>
+    /// Fallback projection that reads only fields directly on Tiskilista.
+    /// Used when MapDetail throws — typically when an associated row
+    /// (Huoneisto, Tarkastukset, Talousyksikkö) has dangling FK targets
+    /// that crash XPO's eager-load. The user still sees the apartment
+    /// rather than a hard 500.
+    /// </summary>
+    private static TiskilistaDetailDto MapDetailMinimal(
+        XpoTiskilista t, IDictionary<Guid, DateTime> upcoming, double? distanceKm) => new(
+        Id: t.OID,
+        Osoite: t.katuosoite ?? string.Empty,
+        Kptunnus: t.kptunnus == 0 ? null : t.kptunnus,
+        Huonetunnus: t.huonetunnus == 0 ? null : t.huonetunnus,
+        Postinumero: t.Postinumero,
+        Postitoimipaikka: t.Postitoimipaikka,
+        Tyyppi: t.tyyppi,
+        Laji: t.laji,
+        Vuokra: t.vuokra,
+        Vapautuu: ToOffset(t.vapautuu),
+        Poismuutto: ToOffset(t.poismuutto),
+        VapautuuAsiakkaalta: ToOffset(t.VapautuuAsiakkaalta),
+        RemonttiAlkaa: ToOffset(t.RemontinAlkamispaiva),
+        RemonttiPaattyy: ToOffset(t.RemontinPaattymispaiva),
+        Remonttityyppi: NormaliseString(t.Remonttityyppi),
+        Neliot: t.neliot,
+        Kerros: t.kerros,
+        Kerroksia: t.kerroksia,
+        Tila: t.Tila,
+        SopimusTila: t.SopimusTila,
+        Kunta: t.kunta,
+        Kaupunginosa: t.KuntaAlue,
+        Markkinointialue: t.Markkinointialue,
+        Prio: null,                                  // Huoneisto-traversal
+        Isannoitsija: NormaliseString(t.Isannoitsija),
+        Markkinoija: NormaliseString(t.Markkinoija),
+        TarkastusTila: null,                         // Huoneisto-traversal
+        LumoFi: false,                               // Huoneisto-traversal (Huoneisto.LumoOneEnabled)
+        Vuokraovi: t.Vuokraovi,
+        OnKuvausTarve: false,                        // Huoneisto-traversal
+        Muistio: t.muistio,
+        HuoneistoMuistio: null,                      // Huoneisto-traversal
+        Kuvaus: t.kuvaus,
+        LisaTieto: t.LisaTieto,
+        BrochureUrl: null,                           // Huoneisto-traversal
+        Hissi: t.hissi,
+        Parveke: t.parveke,
+        Sauna: t.sauna,
+        YhteissaUna: t.yhtsauna,
+        Vesimittaus: t.vesimittaus,
+        Pesula: t.pesula,
+        Astianpesukone: t.astianpesukone,
+        Aluetoimisto: t.Aluetoimisto,
+        NextEsittelyAt: NextEsittelyFor(t, upcoming),
+        Latitude: t.Latitude == 0 ? null : t.Latitude,
+        Longitude: t.Longitude == 0 ? null : t.Longitude,
+        DistanceKm: distanceKm,
+        LumoUrl: null);                              // Huoneisto-traversal
 }

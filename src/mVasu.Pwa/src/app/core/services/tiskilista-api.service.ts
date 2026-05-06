@@ -36,14 +36,18 @@ export class TiskilistaApiService {
     if (query.vapautuuTo) params = params.set('vapautuuTo', query.vapautuuTo);
     if (query.onKuvausTarveOnly) params = params.set('onKuvausTarveOnly', 'true');
     if (query.lumoFiOnly) params = params.set('lumoFiOnly', 'true');
+    if (query.hasUpcomingEsittelyOnly) params = params.set('hasUpcomingEsittelyOnly', 'true');
     if (query.userLat !== null) params = params.set('userLat', String(query.userLat));
     if (query.userLon !== null) params = params.set('userLon', String(query.userLon));
 
     return this.http.get<TiskilistaPageDto>(`${this.baseUrl}/api/tiskilista`, { params });
   }
 
-  get(id: string): Observable<TiskilistaDetailDto> {
-    return this.http.get<TiskilistaDetailDto>(`${this.baseUrl}/api/tiskilista/${id}`);
+  get(id: string, userLat?: number | null, userLon?: number | null): Observable<TiskilistaDetailDto> {
+    let params = new HttpParams();
+    if (userLat !== undefined && userLat !== null) params = params.set('userLat', String(userLat));
+    if (userLon !== undefined && userLon !== null) params = params.set('userLon', String(userLon));
+    return this.http.get<TiskilistaDetailDto>(`${this.baseUrl}/api/tiskilista/${id}`, { params });
   }
 
   distinctValues(): Observable<TiskilistaDistinctValuesDto> {

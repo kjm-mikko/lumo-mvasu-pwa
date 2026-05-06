@@ -16,6 +16,7 @@ import { DxButtonModule } from 'devextreme-angular/ui/button';
 import { DxDateBoxModule } from 'devextreme-angular/ui/date-box';
 import { DxNumberBoxModule } from 'devextreme-angular/ui/number-box';
 import { DxTagBoxModule } from 'devextreme-angular/ui/tag-box';
+import { DxToastModule } from 'devextreme-angular/ui/toast';
 
 import { TiskilistaApiService } from '../../core/services/tiskilista-api.service';
 import { LocationService } from '../../core/services/location.service';
@@ -34,7 +35,20 @@ import {
 } from '../../core/models/tiskilista-list-query.dto';
 
 type MultiSelectKey = 'lajit' | 'tyypit' | 'kunnat' | 'kaupunginosat' | 'sopimustilat' | 'isannoitsijat' | 'markkinoijat';
-type BoolFilterKey = 'onKuvausTarveOnly' | 'lumoFiOnly';
+type BoolFilterKey = 'onKuvausTarveOnly' | 'lumoFiOnly' | 'hasUpcomingEsittelyOnly';
+
+interface ActiveFilterChip {
+  readonly label: string;
+  readonly clear: () => void;
+}
+
+type ToastType = 'info' | 'success' | 'warning' | 'error';
+interface ToastState {
+  readonly visible: boolean;
+  readonly message: string;
+  readonly type: ToastType;
+}
+const TOAST_HIDDEN: ToastState = { visible: false, message: '', type: 'info' };
 
 /** Returns true when both Date instances represent the same calendar day. */
 function sameDay(a: Date | null, b: Date | null): boolean {
@@ -57,7 +71,7 @@ function toIsoDate(d: Date | null): string | null {
 @Component({
   selector: 'app-tiskilista-list',
   imports: [
-    DxButtonModule, DxDateBoxModule, DxNumberBoxModule, DxTagBoxModule,
+    DxButtonModule, DxDateBoxModule, DxNumberBoxModule, DxTagBoxModule, DxToastModule,
     RouterLink, FormsModule, CurrencyPipe, DatePipe, DecimalPipe,
   ],
   template: `
@@ -69,13 +83,27 @@ function toIsoDate(d: Date | null): string | null {
             <span class="count">{{ p.total }} huoneistoa</span>
           }
         </div>
-        <dx-button
-          class="header-search"
-          icon="search"
-          stylingMode="text"
-          [elementAttr]="{ 'aria-label': 'Avaa pikahaku' }"
-          (onClick)="openQuickSearch()"
-        ></dx-button>
+        <div class="header-actions">
+          <dx-button
+            icon="refresh"
+            stylingMode="text"
+            [disabled]="loading()"
+            [elementAttr]="{ 'aria-label': 'Päivitä lista' }"
+            (onClick)="refreshList()"
+          ></dx-button>
+          <dx-button
+            icon="datafield"
+            stylingMode="text"
+            [elementAttr]="{ 'aria-label': 'Laske tiskilista' }"
+            (onClick)="laskeTiskilista()"
+          ></dx-button>
+          <dx-button
+            icon="search"
+            stylingMode="text"
+            [elementAttr]="{ 'aria-label': 'Avaa pikahaku' }"
+            (onClick)="openQuickSearch()"
+          ></dx-button>
+        </div>
       </header>
 
       <section class="filters" role="search">
@@ -266,6 +294,12 @@ function toIsoDate(d: Date | null): string | null {
             [class.active]="lumoFiOnly()"
             (click)="toggleBool('lumoFiOnly')"
           >Vain Lumo.fi</button>
+          <button
+            type="button"
+            [attr.aria-pressed]="hasUpcomingEsittelyOnly()"
+            [class.active]="hasUpcomingEsittelyOnly()"
+            (click)="toggleBool('hasUpcomingEsittelyOnly')"
+          >Vain tulevat esittelyt</button>
         </div>
 
         <select
@@ -282,6 +316,25 @@ function toIsoDate(d: Date | null): string | null {
           }
         </select>
       </section>
+
+      @if (activeFilters().length > 0) {
+        <section class="active-filters" role="status" aria-label="Aktiiviset suodattimet">
+          @for (chip of activeFilters(); track chip.label) {
+            <button
+              type="button"
+              class="active-chip"
+              (click)="chip.clear()"
+              [attr.aria-label]="'Poista suodatin: ' + chip.label"
+            >
+              <span>{{ chip.label }}</span>
+              <span class="chip-x" aria-hidden="true">×</span>
+            </button>
+          }
+          <button type="button" class="clear-all" (click)="clearAllFilters()">
+            Tyhjennä kaikki
+          </button>
+        </section>
+      }
 
       @if (loading()) {
         <p class="status">Ladataan…</p>
@@ -306,6 +359,14 @@ function toIsoDate(d: Date | null): string | null {
                       <span class="distance">{{ item.distanceKm | number:'1.0-1' }} km</span>
                     }
                   </div>
+                  @if (item.nextEsittelyAt) {
+                    <div class="esittely-banner" role="note">
+                      <span class="esittely-icon" aria-hidden="true">📅</span>
+                      <span class="esittely-text">
+                        Esittely {{ item.nextEsittelyAt | date:'dd.MM.yyyy HH:mm' }}
+                      </span>
+                    </div>
+                  }
                   @if (item.kptunnus || item.huonetunnus) {
                     <div class="card-id">
                       @if (item.kptunnus) { <span>{{ item.kptunnus }}</span> }
@@ -357,6 +418,14 @@ function toIsoDate(d: Date | null): string | null {
         }
       }
     </main>
+
+    <dx-toast
+      [visible]="toast().visible"
+      [message]="toast().message"
+      [type]="toast().type"
+      [displayTime]="2500"
+      (onHiding)="onToastHide()"
+    ></dx-toast>
   `,
   styleUrl: './tiskilista-list.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -387,6 +456,7 @@ export class TiskilistaListComponent {
   // Boolean filters — only "true" surfaces a constraint; "false" means "no filter".
   protected readonly onKuvausTarveOnly = signal<boolean>(TiskilistaListComponent.loadBool('onKuvausTarveOnly'));
   protected readonly lumoFiOnly = signal<boolean>(TiskilistaListComponent.loadBool('lumoFiOnly'));
+  protected readonly hasUpcomingEsittelyOnly = signal<boolean>(TiskilistaListComponent.loadBool('hasUpcomingEsittelyOnly'));
 
   // Range filters — persisted as a single JSON object so we don't pile up
   // five more localStorage keys.
@@ -423,13 +493,24 @@ export class TiskilistaListComponent {
 
   /**
    * Kaupunginosa list narrows when one or more kunta is selected — only
-   * districts that exist for those municipalities should be offered.
-   * Without a fetched mapping we can't actually scope; fall back to the
-   * full distinct list for now and treat the cascading filter as a
-   * server-side concern (the InOperator on KuntaAlue still respects
-   * the selection regardless of which kunta provides the value).
+   * districts that exist for those municipalities show up. Falls back
+   * to the full distinct list when no kunta is chosen so the dropdown
+   * still works as a free-form filter.
    */
-  protected readonly kaupunginosatVisible = computed<string[]>(() => [...this.distinctValues().kaupunginosat]);
+  protected readonly kaupunginosatVisible = computed<string[]>(() => {
+    const dv = this.distinctValues();
+    const selectedKunnat = this.kunnat();
+    if (selectedKunnat.length === 0) {
+      return [...dv.kaupunginosat];
+    }
+    const kuntaSet = new Set(selectedKunnat.map((k) => k.toLocaleLowerCase('fi-FI')));
+    const fi = new Intl.Collator('fi-FI', { sensitivity: 'base' });
+    return [...new Set(
+      dv.kaupunginosatByKunta
+        .filter((p) => kuntaSet.has(p.kunta.toLocaleLowerCase('fi-FI')))
+        .map((p) => p.kaupunginosa),
+    )].sort((a, b) => fi.compare(a, b));
+  });
 
   protected onMultiSelectChanged(key: MultiSelectKey, event: { value?: string[] | null }): void {
     const next = event.value ?? [];
@@ -458,7 +539,9 @@ export class TiskilistaListComponent {
   // -- Boolean filters -------------------------------------------------------
 
   protected toggleBool(key: BoolFilterKey): void {
-    const sig = key === 'onKuvausTarveOnly' ? this.onKuvausTarveOnly : this.lumoFiOnly;
+    const sig = key === 'onKuvausTarveOnly' ? this.onKuvausTarveOnly
+      : key === 'lumoFiOnly' ? this.lumoFiOnly
+      : this.hasUpcomingEsittelyOnly;
     const next = !sig();
     sig.set(next);
     TiskilistaListComponent.persistBool(key, next);
@@ -629,6 +712,7 @@ export class TiskilistaListComponent {
       vapautuuTo: toIsoDate(this.vapautuuTo()),
       onKuvausTarveOnly: this.onKuvausTarveOnly(),
       lumoFiOnly: this.lumoFiOnly(),
+      hasUpcomingEsittelyOnly: this.hasUpcomingEsittelyOnly(),
       scope: this.scope(),
       sortBy: this.sortBy(),
       userLat: pos?.coords.latitude ?? null,
@@ -640,6 +724,9 @@ export class TiskilistaListComponent {
 
   constructor() {
     // Reset page to 1 whenever any non-pagination filter changes.
+    // Do NOT read pageNumber inside this effect — that would make it a
+    // dependency, so calling goPage(2) would re-fire the effect and reset
+    // back to 1, breaking pagination. Always-set is a no-op when already 1.
     effect(() => {
       this.searchInput();
       this.scope();
@@ -657,9 +744,22 @@ export class TiskilistaListComponent {
       this.vapautuuTo();
       this.onKuvausTarveOnly();
       this.lumoFiOnly();
+      this.hasUpcomingEsittelyOnly();
       this.sortBy();
-      // Skip on the initial run; rely on the query effect to load page 1.
-      if (this.pageNumber() !== 1) this.pageNumber.set(1);
+      this.pageNumber.set(1);
+    }, { allowSignalWrites: true });
+
+    // Auto-prune orphan kaupunginosa selections when kunta selection changes:
+    // if user picked Helsinki/Kamppi and then switches kunta to Tampere, the
+    // Kamppi tag should drop instead of silently filtering rows to none.
+    effect(() => {
+      const visible = new Set(this.kaupunginosatVisible());
+      const current = this.kaupunginosat();
+      const pruned = current.filter((k) => visible.has(k));
+      if (pruned.length !== current.length) {
+        this.kaupunginosat.set(pruned);
+        TiskilistaListComponent['persistList']('kaupunginosat', pruned);
+      }
     }, { allowSignalWrites: true });
 
     // Fetch distinct values once on init for the filter dropdowns.
@@ -712,6 +812,134 @@ export class TiskilistaListComponent {
     if (page < 1) return;
     if (page > this.totalPages()) return;
     this.pageNumber.set(page);
+  }
+
+  // -- Active-filter chip row -----------------------------------------------
+
+  protected readonly activeFilters = computed<ReadonlyArray<ActiveFilterChip>>(() => {
+    const chips: ActiveFilterChip[] = [];
+
+    const q = this.searchInput().trim();
+    if (q) {
+      chips.push({ label: `Hae: "${q}"`, clear: () => this.searchInput.set('') });
+    }
+
+    if (this.status() !== null) {
+      const v = this.status()!;
+      chips.push({ label: `Tila: ${v}`, clear: () => this.status.set(null) });
+    }
+
+    this.multiSelectChip(chips, 'lajit', 'Laji');
+    this.multiSelectChip(chips, 'tyypit', 'Tyyppi');
+    this.multiSelectChip(chips, 'kunnat', 'Kunta');
+    this.multiSelectChip(chips, 'kaupunginosat', 'Kaupunginosa');
+    this.multiSelectChip(chips, 'sopimustilat', 'Sopimustila');
+    this.multiSelectChip(chips, 'isannoitsijat', 'Isännöitsijä');
+    this.multiSelectChip(chips, 'markkinoijat', 'Markkinoija');
+
+    const min = this.neliotMin();
+    const max = this.neliotMax();
+    if (min !== null || max !== null) {
+      chips.push({
+        label: `Pinta-ala: ${min ?? '?'}–${max ?? '?'} m²`,
+        clear: () => {
+          this.neliotMin.set(null);
+          this.neliotMax.set(null);
+          TiskilistaListComponent['persistRanges']({ neliotMin: null, neliotMax: null });
+        },
+      });
+    }
+
+    const vfFrom = this.vapautuuFrom();
+    const vfTo = this.vapautuuTo();
+    if (vfFrom !== null || vfTo !== null) {
+      const fmt = (d: Date | null) => d ? d.toLocaleDateString('fi-FI') : '?';
+      chips.push({
+        label: `Vapautuu: ${fmt(vfFrom)}–${fmt(vfTo)}`,
+        clear: () => {
+          this.vapautuuFrom.set(null);
+          this.vapautuuTo.set(null);
+          TiskilistaListComponent['persistDate']('vapautuuFrom', null);
+          TiskilistaListComponent['persistDate']('vapautuuTo', null);
+        },
+      });
+    }
+
+    if (this.onKuvausTarveOnly()) {
+      chips.push({ label: 'Vain kuvaustarve', clear: () => this.toggleBool('onKuvausTarveOnly') });
+    }
+    if (this.lumoFiOnly()) {
+      chips.push({ label: 'Vain Lumo.fi', clear: () => this.toggleBool('lumoFiOnly') });
+    }
+    if (this.hasUpcomingEsittelyOnly()) {
+      chips.push({ label: 'Vain tulevat esittelyt', clear: () => this.toggleBool('hasUpcomingEsittelyOnly') });
+    }
+
+    return chips;
+  });
+
+  private multiSelectChip(chips: ActiveFilterChip[], key: MultiSelectKey, label: string): void {
+    const values = this.signalForKey(key)();
+    if (values.length === 0) return;
+    chips.push({
+      label: `${label}: ${values.join(', ')}`,
+      clear: () => {
+        this.signalForKey(key).set([]);
+        TiskilistaListComponent['persistList'](key, []);
+      },
+    });
+  }
+
+  protected clearAllFilters(): void {
+    this.searchInput.set('');
+    this.status.set(null);
+    (['lajit', 'tyypit', 'kunnat', 'kaupunginosat', 'sopimustilat', 'isannoitsijat', 'markkinoijat'] as MultiSelectKey[])
+      .forEach((key) => {
+        this.signalForKey(key).set([]);
+        TiskilistaListComponent['persistList'](key, []);
+      });
+    this.neliotMin.set(null);
+    this.neliotMax.set(null);
+    TiskilistaListComponent['persistRanges']({ neliotMin: null, neliotMax: null });
+    this.vapautuuFrom.set(null);
+    this.vapautuuTo.set(null);
+    TiskilistaListComponent['persistDate']('vapautuuFrom', null);
+    TiskilistaListComponent['persistDate']('vapautuuTo', null);
+    this.onKuvausTarveOnly.set(false);
+    this.lumoFiOnly.set(false);
+    this.hasUpcomingEsittelyOnly.set(false);
+    (['onKuvausTarveOnly', 'lumoFiOnly', 'hasUpcomingEsittelyOnly'] as BoolFilterKey[])
+      .forEach((key) => TiskilistaListComponent['persistBool'](key, false));
+  }
+
+  // -- Toolbar actions -------------------------------------------------------
+
+  protected readonly toast = signal<ToastState>(TOAST_HIDDEN);
+
+  protected refreshList(): void {
+    this.loading.set(true);
+    this.loadError.set(false);
+    this.api.list(this.query())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (p) => { this.loading.set(false); this.page.set(p); this.flash('Lista päivitetty', 'success'); },
+        error: () => { this.loading.set(false); this.loadError.set(true); },
+      });
+  }
+
+  protected laskeTiskilista(): void {
+    // Server-side recalculation of the Tiskilista — XAF action
+    // TiskilistaViewController.LaskeTiskilistaAction. Wires to a backend
+    // endpoint in a follow-up; today this is a stub that surfaces intent.
+    this.flash('Laske tiskilista — toiminnallisuus tulossa', 'info');
+  }
+
+  protected onToastHide(): void {
+    this.toast.set(TOAST_HIDDEN);
+  }
+
+  private flash(message: string, type: ToastState['type']): void {
+    this.toast.set({ visible: true, message, type });
   }
 
   /**

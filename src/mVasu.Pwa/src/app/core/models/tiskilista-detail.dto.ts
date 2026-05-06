@@ -1,6 +1,8 @@
 export interface TiskilistaDetailDto {
   readonly id: string;
   readonly osoite: string;
+  readonly kptunnus: number | null;
+  readonly huonetunnus: number | null;
   readonly postinumero: string | null;
   readonly postitoimipaikka: string | null;
   readonly tyyppi: string | null;
@@ -11,6 +13,7 @@ export interface TiskilistaDetailDto {
   readonly vapautuuAsiakkaalta: string | null;
   readonly remonttiAlkaa: string | null;
   readonly remonttiPaattyy: string | null;
+  readonly remonttityyppi: string | null;
   readonly neliot: number | null;
   readonly kerros: string | null;
   readonly kerroksia: string | null;
@@ -39,7 +42,9 @@ export interface TiskilistaDetailDto {
   readonly pesula: boolean;
   readonly astianpesukone: boolean;
   readonly aluetoimisto: string | null;
+  readonly nextEsittelyAt: string | null;
   readonly latitude: number | null;
   readonly longitude: number | null;
+  readonly distanceKm: number | null;
   readonly lumoUrl: string | null;
 }
