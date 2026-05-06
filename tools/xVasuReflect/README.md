@@ -8,6 +8,8 @@ tai uudelleennimettyjä eri CI-buildissa).
 
 ## Käyttö
 
+### Perusdumppi (XPO-tason properties + key/alias/assoc)
+
 ```powershell
 # Dumppaa yksittäisen tyypin
 dotnet run --project tools/xVasuReflect -- xVasu.Data.Security.xVasuSecuritySystemUserTask
@@ -18,11 +20,50 @@ dotnet run --project tools/xVasuReflect -- xVasu.Data.Kire.Huoneisto xVasu.Data.
 # Listaa namespacen kaikki tyypit
 dotnet run --project tools/xVasuReflect -- --list xVasu.Data.Security
 dotnet run --project tools/xVasuReflect -- --list xVasu.Data.Kire
+
+# Hae tyyppi nimellä (kun et tiedä namespace:a)
+dotnet run --project tools/xVasuReflect -- --find Sopimus
+
+# Listaa metodit + overloads (käytetään API-pintoja kaivaessa, esim. XPO SelectData)
+dotnet run --project tools/xVasuReflect -- --methods DevExpress.Xpo.Session SelectData
 ```
 
-Tulostus näyttää tarvittavan: property-nimi, .NET-tyyppi, declaring type
-ja XPO-attribuutit (`key`, `alias:…`, `assoc:…`, `nonpersistent`,
-`readonly`).
+Perusdumpin tulostus: property-nimi, .NET-tyyppi, declaring type, XPO-attribuutit
+(`key`, `alias:…`, `assoc:…`, `nonpersistent`, `readonly`).
+
+### XAF-metadatat (DetailView-rakennus PWA:han)
+
+```powershell
+# Dump kaikki XAF-attribuutit per property — käytetään detail-näkymän
+# kenttien järjestyksen, näkyvyyden ja validoinnin reverse-engineeringiin.
+dotnet run --project tools/xVasuReflect -- --xaf-fields xVasu.Data.Asma.Henkilo
+
+# Etsi ViewController-luokat ja niiden Actions joita kohdistuu tyyppiin.
+dotnet run --project tools/xVasuReflect -- --xaf-controllers xVasu.Data.Asma.Henkilo
+
+# Diagnostiikka: listaa kaikki ladatut ViewController-luokat (tai filteröidyt).
+dotnet run --project tools/xVasuReflect -- --xaf-all-controllers          # 100+ DevExpress-sisäistä
+dotnet run --project tools/xVasuReflect -- --xaf-all-controllers Asiakas  # name-filter
+```
+
+`--xaf-fields` näyttää per kenttä: `Index`, `Browsable`, `VisibleInDetailView`,
+`RuleRequiredField`, sekä summan tärkeistä attribuuteista (`DisplayName`,
+`ModelDefault`, `EditorAlias`, `Appearance`, `RuleRange`, …). Class-level
+attribuutit dumpataan erikseen (`DefaultClassOptions`, `ImageName`,
+`NavigationItem`, `ModelDefault("Caption", …)`, `Appearance`-säännöt).
+
+**Miksi `--xaf-controllers` voi palauttaa 0:n.** xVasu-projektin custom
+ViewController-luokat (Impersonate, SMS, Pikavaraus, ATPI Operaatiot yms.)
+asuvat Web/Win/Blazor-puolen modulissa (esim. `xVasu.Module.Web.dll`) joka
+ei ole tämän työkalun NuGet-ribkkeen alaisuudessa. xVasu.Module-paketti
+sisältää persistenttiluokat ja perusservicet, mutta ei UI-puolen
+controllers:eja. Action-listan löytäminen vaatii joko:
+
+- Lataa kohdedeployin Web/Win-DLL-tiedosto suoraan tooliin (`Assembly.LoadFrom`)
+- TAI tee ristikkäishaku `--xaf-fields`-tulosteesta — Appearance-säännöt
+  joiden `AppearanceItemType="Action"` paljastavat action-ID:n
+  `TargetItems`-attribuutista (esim. `QueryAtpiDataAction` löytyy Henkilo:n
+  appearance-säännöistä).
 
 ## A0-vaiheen löydökset (vahvistus NAVIGATION.md §3 vasten)
 
