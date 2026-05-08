@@ -9,7 +9,7 @@ import { Injectable, signal } from '@angular/core';
  * keyboard interactions tuned independently of the API.
  */
 
-export type SearchGroupId = 'units' | 'people' | 'contracts' | 'actions';
+export type SearchGroupId = 'apartments' | 'units' | 'people' | 'contracts' | 'actions';
 
 export interface SearchHit {
   readonly id: string;
@@ -34,10 +34,11 @@ const RECENT_MAX = 5;
 const MIN_QUERY_LENGTH = 2;
 
 const GROUP_LABELS: Record<SearchGroupId, string> = {
-  units:     'Kohteet',
-  people:    'Asukkaat',
-  contracts: 'Sopimukset',
-  actions:   'Toiminnot',
+  apartments: 'Huoneistot',
+  units:      'Vapaat huoneistot',
+  people:     'Asukkaat',
+  contracts:  'Sopimukset',
+  actions:    'Toiminnot',
 };
 
 const MOCK_HITS: SearchHit[] = [
@@ -118,7 +119,7 @@ export class QuickSearchService {
     if (q.length < MIN_QUERY_LENGTH) return [];
     const needle = q.toLowerCase();
 
-    const groups: SearchGroupId[] = ['units', 'people', 'contracts', 'actions'];
+    const groups: SearchGroupId[] = ['units', 'people', 'contracts', 'apartments', 'actions'];
     return groups
       .map<SearchGroup>(id => ({
         id,

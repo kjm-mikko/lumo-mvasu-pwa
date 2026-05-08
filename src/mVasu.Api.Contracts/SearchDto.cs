@@ -39,8 +39,9 @@ public sealed record SearchHitDto(
 /// <summary>Canonical group identifiers — see SCREENS.md §05.</summary>
 public static class SearchGroupIds
 {
-    public const string Units     = "units";       // Kohteet
-    public const string People    = "people";      // Asukkaat
-    public const string Contracts = "contracts";   // Sopimukset
-    public const string Actions   = "actions";     // Toiminnot
+    public const string Apartments = "apartments";  // Huoneistot (all residential, t_Huoneisto FTS)
+    public const string Units      = "units";       // Vapaat huoneistot (t_tiskilista — vacant only)
+    public const string People     = "people";      // Asukkaat
+    public const string Contracts  = "contracts";   // Sopimukset
+    public const string Actions    = "actions";     // Toiminnot
 }
