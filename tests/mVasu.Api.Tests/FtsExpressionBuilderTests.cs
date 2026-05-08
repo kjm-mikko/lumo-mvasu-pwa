@@ -1,14 +1,15 @@
-using mVasu.Api.Customers;
+using mVasu.Api.Common;
 
 namespace mVasu.Api.Tests;
 
 /// <summary>
-/// Pinpoints the contract of <see cref="XpoCustomerQueryService.BuildFtsContainsExpression"/>:
+/// Pinpoints the contract of <see cref="FtsExpressionBuilder.Build"/>:
 /// what gets sent to SQL Server's <c>CONTAINS</c> for a given user
-/// input. The actual SQL round-trip is exercised in dev / staging
-/// where the fts_Asiakas catalog exists.
+/// input. Shared by every FTS-using service (customers, tiskilista, …).
+/// The actual SQL round-trip is exercised in dev / staging where the
+/// fts_Asiakas catalog exists.
 /// </summary>
-public class CustomerFtsExpressionTests
+public class FtsExpressionBuilderTests
 {
     [Theory]
     [InlineData("",          null)]
@@ -20,21 +21,21 @@ public class CustomerFtsExpressionTests
     [InlineData("near",      null)]
     public void EdgeCases_ReturnNull(string? input, string? expected)
     {
-        Assert.Equal(expected, XpoCustomerQueryService.BuildFtsContainsExpression(input ?? string.Empty));
+        Assert.Equal(expected, FtsExpressionBuilder.Build(input ?? string.Empty));
     }
 
     [Fact]
     public void SingleWord_WrapsWithPrefixWildcard()
     {
         Assert.Equal("\"koivu*\"",
-            XpoCustomerQueryService.BuildFtsContainsExpression("koivu"));
+            FtsExpressionBuilder.Build("koivu"));
     }
 
     [Fact]
     public void MultipleWords_AreAndJoined_ForNarrowingMatch()
     {
         Assert.Equal("\"matti*\" AND \"koivu*\"",
-            XpoCustomerQueryService.BuildFtsContainsExpression("matti koivu"));
+            FtsExpressionBuilder.Build("matti koivu"));
     }
 
     [Fact]
@@ -43,14 +44,14 @@ public class CustomerFtsExpressionTests
         // Otherwise CONTAINS would see "matti""smith" which it parses as
         // an unterminated phrase or worse.
         Assert.Equal("\"mattismith*\"",
-            XpoCustomerQueryService.BuildFtsContainsExpression("matti\"smith"));
+            FtsExpressionBuilder.Build("matti\"smith"));
     }
 
     [Fact]
     public void SquareBrackets_AreStripped()
     {
         Assert.Equal("\"koivu*\"",
-            XpoCustomerQueryService.BuildFtsContainsExpression("[koivu]"));
+            FtsExpressionBuilder.Build("[koivu]"));
     }
 
     [Fact]
@@ -59,7 +60,7 @@ public class CustomerFtsExpressionTests
         // "or" alone would short-circuit to null; mixed with real terms
         // we drop the operator and keep the rest.
         Assert.Equal("\"matti*\" AND \"koivu*\"",
-            XpoCustomerQueryService.BuildFtsContainsExpression("matti or koivu"));
+            FtsExpressionBuilder.Build("matti or koivu"));
     }
 
     [Fact]
@@ -70,13 +71,13 @@ public class CustomerFtsExpressionTests
         // is preserved as the user typed it; CONTAINS is case-insensitive
         // by default so the original casing is irrelevant for matching.
         Assert.Equal("\"Hämäläinen*\"",
-            XpoCustomerQueryService.BuildFtsContainsExpression("Hämäläinen"));
+            FtsExpressionBuilder.Build("Hämäläinen"));
     }
 
     [Fact]
     public void TabsAndNewlines_AreTreatedAsSeparators()
     {
         Assert.Equal("\"matti*\" AND \"koivu*\"",
-            XpoCustomerQueryService.BuildFtsContainsExpression("matti\tkoivu"));
+            FtsExpressionBuilder.Build("matti\tkoivu"));
     }
 }

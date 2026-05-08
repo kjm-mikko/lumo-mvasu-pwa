@@ -7,6 +7,7 @@ using DevExpress.ExpressApp.Xpo;
 using DevExpress.Xpo;
 using DevExpress.Xpo.DB;
 using mVasu.Api.Authentication;
+using mVasu.Api.Common;
 using mVasu.Api.Contracts;
 using xVasu.Data.Asma;
 using xVasu.Data.Security;
@@ -360,7 +361,7 @@ public sealed class XpoCustomerQueryService(
     /// </remarks>
     private List<int> LoadFtsAsiakasNumbers(Session session, string searchTerm)
     {
-        var ftsExpression = BuildFtsContainsExpression(searchTerm);
+        var ftsExpression = FtsExpressionBuilder.Build(searchTerm);
         if (ftsExpression is null)
         {
             return new List<int>();
@@ -372,11 +373,11 @@ public sealed class XpoCustomerQueryService(
         // un-prefixing the table elsewhere shouldn't quietly skip the
         // FTS path.
         var classInfo = session.GetClassInfo(typeof(Asiakas));
-        var tableName = classInfo.TableName;
+        var qualifiedTable = XpoTableNameResolver.Qualified(classInfo.TableName);
 
         var sql =
             $"SELECT TOP {FtsResultCap} [AsiakasNumero] " +
-            $"FROM [dbo].[{tableName}] " +
+            $"FROM {qualifiedTable} " +
             "WHERE [GCRecord] IS NULL " +
             "  AND CONTAINS(([EtuNimi], [SukuNimi], [KatuOsoite], [Email], [Gsm]), @ftsTerm)";
 
@@ -412,51 +413,8 @@ public sealed class XpoCustomerQueryService(
         return ids;
     }
 
-    /// <summary>
-    /// Translates the user's free-text input into a SQL Server
-    /// <c>CONTAINS</c> expression: <c>"word1*" AND "word2*"</c>. Each
-    /// whitespace-delimited token is sanitised, wrapped in double
-    /// quotes, suffixed with <c>*</c> for prefix matching, and
-    /// AND-joined so multi-word inputs narrow the result set rather
-    /// than widening it. Returns <c>null</c> when nothing usable
-    /// remains (only operator words, blanks, etc.) — the caller treats
-    /// that as "no FTS match" and skips the round-trip.
-    /// </summary>
-    public static string? BuildFtsContainsExpression(string searchTerm)
-    {
-        if (string.IsNullOrWhiteSpace(searchTerm)) return null;
-
-        var tokens = searchTerm.Split(
-            new[] { ' ', '\t', '\n', '\r' },
-            StringSplitOptions.RemoveEmptyEntries);
-
-        var clauses = new List<string>(tokens.Length);
-        foreach (var raw in tokens)
-        {
-            // Strip the few characters that have meta meaning in
-            // CONTAINS expressions (quotes, square brackets) and the
-            // outer whitespace. Leaves accented characters intact —
-            // the catalog is built with the Finnish word breaker.
-            var sanitised = raw
-                .Replace("\"", string.Empty)
-                .Replace("[", string.Empty)
-                .Replace("]", string.Empty)
-                .Trim();
-
-            if (sanitised.Length < 2) continue;
-            if (IsFtsReservedWord(sanitised)) continue;
-
-            clauses.Add("\"" + sanitised + "*\"");
-        }
-
-        return clauses.Count == 0 ? null : string.Join(" AND ", clauses);
-    }
-
-    private static bool IsFtsReservedWord(string word) =>
-        string.Equals(word, "AND",  StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(word, "OR",   StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(word, "NOT",  StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(word, "NEAR", StringComparison.OrdinalIgnoreCase);
+    // FTS expression construction lives in mVasu.Api.Common.FtsExpressionBuilder
+    // — the same helper is shared by Tiskilista's FTS pre-pass.
 
     /// <summary>
     /// Projects the paginated AsiakasNumero key list for the given

@@ -3,7 +3,9 @@ using DevExpress.Data.Filtering;
 using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Xpo;
 using DevExpress.Xpo;
+using DevExpress.Xpo.DB;
 using mVasu.Api.Authentication;
+using mVasu.Api.Common;
 using mVasu.Api.Contracts;
 using xVasu.Data.Security;
 using XpoShowing = xVasu.Data.Kire.HuoneistoEsittelyTiedot;
@@ -21,6 +23,13 @@ public sealed class TiskilistaQueryService(
     IObjectSpaceProvider objectSpaceProvider,
     ILogger<TiskilistaQueryService> logger) : ITiskilistaQueryService
 {
+    /// <summary>
+    /// Hard ceiling on the FTS pre-pass result list. Same rationale as
+    /// the customers FTS path: 1000 ids is well past the point a human
+    /// can scan and far below SQL's IN-list limit.
+    /// </summary>
+    private const int FtsResultCap = 1000;
+
     private static readonly TimeZoneInfo HelsinkiTz = ResolveHelsinkiTimeZone();
 
     private static TimeZoneInfo ResolveHelsinkiTimeZone()
@@ -42,8 +51,17 @@ public sealed class TiskilistaQueryService(
 
         try
         {
-            var criteria = BuildCriteria(user, query);
             var session = ((XPObjectSpace)os).Session;
+
+            // Compose: filter criteria (always present) AND search
+            // criteria (FTS-driven, only when query.Search is non-empty).
+            // Splitting these lets BuildCriteria stay XPO-criteria-pure
+            // while BuildSearchCriteria does the raw SQL FTS pre-pass.
+            var baseCriteria = BuildCriteria(user, query);
+            var searchCriteria = BuildSearchCriteria(session, query.Search);
+            var criteria = searchCriteria is null
+                ? baseCriteria
+                : CriteriaOperator.And(baseCriteria, searchCriteria);
 
             // Distance sort: load the full filtered set and rank in memory.
             // For non-distance sorts use SQL-level ordering + skip/top.
@@ -250,6 +268,13 @@ public sealed class TiskilistaQueryService(
         return (resolved, os);
     }
 
+    /// <summary>
+    /// Builds the non-search portion of the Tiskilista filter (scope,
+    /// status, dimensional dropdowns, range bounds, boolean toggles).
+    /// Search predicate is built separately by
+    /// <see cref="BuildSearchCriteria"/> because it goes through the
+    /// SQL Server FULLTEXT pass — see <see cref="LoadFtsTiskilistaOids"/>.
+    /// </summary>
     private static CriteriaOperator BuildCriteria(xVasuSecuritySystemUser user, TiskilistaListQuery query)
     {
         var operands = new List<CriteriaOperator>();
@@ -335,31 +360,122 @@ public sealed class TiskilistaQueryService(
                 "vapautuu", vfTo.ToDateTime(new TimeOnly(23, 59, 59)), BinaryOperatorType.LessOrEqual));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Search))
-        {
-            var search = query.Search.Trim();
-            var searchOperands = new List<CriteriaOperator>
-            {
-                new FunctionOperator(FunctionOperatorType.Contains, new OperandProperty("katuosoite"), search),
-                new FunctionOperator(FunctionOperatorType.Contains, new OperandProperty("kunta"), search),
-                new FunctionOperator(FunctionOperatorType.Contains, new OperandProperty("KuntaAlue"), search),
-                new FunctionOperator(FunctionOperatorType.Contains, new OperandProperty("Postitoimipaikka"), search),
-            };
-
-            // Pure digits → also match kptunnus / huonetunnus exactly. Most
-            // power-users type a kptunnus to jump straight to a building.
-            if (int.TryParse(search, out var num))
-            {
-                searchOperands.Add(new BinaryOperator("kptunnus", num, BinaryOperatorType.Equal));
-                searchOperands.Add(new BinaryOperator("huonetunnus", num, BinaryOperatorType.Equal));
-            }
-
-            operands.Add(CriteriaOperator.Or(searchOperands.ToArray()));
-        }
+        // Search predicate intentionally NOT included here — see
+        // BuildSearchCriteria, which combines a SQL Server FULLTEXT
+        // pre-pass with the int.TryParse fallback for kptunnus /
+        // huonetunnus jumps.
 
         return operands.Count == 0
             ? new BinaryOperator("OID", Guid.Empty, BinaryOperatorType.NotEqual)
             : CriteriaOperator.And(operands);
+    }
+
+    /// <summary>
+    /// Builds the search portion of the Tiskilista criteria. Strategy:
+    /// run a FULLTEXT pre-pass against <c>dbo.t_tiskilista</c> (covers
+    /// 12 indexed columns including <c>katuosoite</c>, <c>kunta</c>,
+    /// <c>laji</c>, <c>tyyppi</c>, <c>tila</c>, <c>Markkinointialue</c>,
+    /// <c>Markkinoija</c>, <c>Isannoitsija</c>, <c>LisaTieto</c>,
+    /// <c>muistio</c>); OR-in with the kptunnus / huonetunnus digit
+    /// fallback so power users can still jump to a numbered apartment.
+    /// </summary>
+    /// <returns>
+    /// <para><c>null</c> when there's no search term — the caller skips
+    /// the AND-combine step entirely.</para>
+    /// <para>A criterion guaranteed to match nothing
+    /// (<c>OID = Guid.Empty</c>) when the FTS pass yielded no hits and
+    /// the input isn't a number — the caller still applies it so the
+    /// totalCount comes back zero without further DB chatter.</para>
+    /// </returns>
+    private CriteriaOperator? BuildSearchCriteria(Session session, string? rawSearch)
+    {
+        if (string.IsNullOrWhiteSpace(rawSearch)) return null;
+        var search = rawSearch.Trim();
+
+        var operands = new List<CriteriaOperator>();
+
+        var ftsOids = LoadFtsTiskilistaOids(session, search);
+        if (ftsOids.Count > 0)
+        {
+            operands.Add(new InOperator("OID", ftsOids.Cast<object>().ToArray()));
+        }
+
+        // Digit fallback — pure-int input maps to exact kptunnus or
+        // huonetunnus match independently of the FTS pass. Power users
+        // type "12345" expecting a direct hit on the numbered building.
+        if (int.TryParse(search, out var num))
+        {
+            operands.Add(new BinaryOperator("kptunnus",    num, BinaryOperatorType.Equal));
+            operands.Add(new BinaryOperator("huonetunnus", num, BinaryOperatorType.Equal));
+        }
+
+        if (operands.Count == 0)
+        {
+            // Nothing matched → return a guaranteed-empty predicate
+            // rather than null so the count + page paths produce zero
+            // hits without round-tripping further.
+            return new BinaryOperator("OID", Guid.Empty, BinaryOperatorType.Equal);
+        }
+
+        return operands.Count == 1 ? operands[0] : CriteriaOperator.Or(operands.ToArray());
+    }
+
+    /// <summary>
+    /// Runs SQL Server <c>CONTAINS</c> against the existing Tiskilista
+    /// fulltext catalog (same <c>fts_Asiakas</c> catalog as Asiakas;
+    /// the catalog is shared, the index per table is separate). The
+    /// catalog covers the 12 Tiskilista columns documented in the
+    /// vasu-sql-schema skill, indexed in Finnish (LCID 1053) so
+    /// stemming and inflection are handled by the engine.
+    /// </summary>
+    private List<Guid> LoadFtsTiskilistaOids(Session session, string searchTerm)
+    {
+        var ftsExpression = FtsExpressionBuilder.Build(searchTerm);
+        if (ftsExpression is null) return new List<Guid>();
+
+        var classInfo = session.GetClassInfo(typeof(XpoTiskilista));
+        var qualifiedTable = XpoTableNameResolver.Qualified(classInfo.TableName);
+
+        var sql =
+            $"SELECT TOP {FtsResultCap} [OID] " +
+            $"FROM {qualifiedTable} " +
+            "WHERE CONTAINS((" +
+            "[katuosoite], [kunta], [KuntaAlue], [Aluetoimisto], " +
+            "[laji], [tyyppi], [tila], " +
+            "[Markkinointialue], [Markkinoija], [Isannoitsija], " +
+            "[LisaTieto], [muistio]" +
+            "), @ftsTerm)";
+
+        SelectedData data;
+        try
+        {
+            data = session.ExecuteQuery(sql,
+                new[] { "@ftsTerm" },
+                new object[] { ftsExpression });
+        }
+        catch (Exception ex)
+        {
+            // FTS catalog disabled or missing? Bail safely — empty list
+            // yields a zero-result UI rather than 500.
+            logger.LogWarning(ex,
+                "Tiskilista FTS query failed for term {Term} — returning empty match list",
+                searchTerm);
+            return new List<Guid>();
+        }
+
+        var oids = new List<Guid>();
+        if (data.ResultSet.Length == 0) return oids;
+
+        foreach (var row in data.ResultSet[0].Rows)
+        {
+            if (row.Values.Length == 0 || row.Values[0] is null) continue;
+            switch (row.Values[0])
+            {
+                case Guid g: oids.Add(g); break;
+                case string s when Guid.TryParse(s, out var parsed): oids.Add(parsed); break;
+            }
+        }
+        return oids;
     }
 
     private static void AddInFilter(List<CriteriaOperator> operands, string property, IReadOnlyList<string>? values)
