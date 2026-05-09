@@ -42,6 +42,7 @@ import {
 
 import { routes } from './app.routes';
 import { environment } from '../environments/environment';
+import { DevAuthInterceptor } from './core/interceptors/dev-auth.interceptor';
 
 // Make every Angular pipe (currency / number / date) default to fi-FI:
 // space thousand separator, comma decimal, "1 006,00 €", "01.05.2001".
@@ -118,11 +119,12 @@ export const appConfig: ApplicationConfig = {
       registrationStrategy: 'registerWhenStable:30000',
     }),
     provideHttpClient(withInterceptorsFromDi()),
-    {
-      provide: HTTP_INTERCEPTORS,
-      useClass: MsalInterceptor,
-      multi: true,
-    },
+    // Dev auth bypass swaps MsalInterceptor for one that stamps an
+    // X-Dev-User header. Both never run together — the dev mode skips the
+    // MSAL token-acquisition path entirely.
+    environment.devAuth?.enabled
+      ? { provide: HTTP_INTERCEPTORS, useClass: DevAuthInterceptor, multi: true }
+      : { provide: HTTP_INTERCEPTORS, useClass: MsalInterceptor, multi: true },
     { provide: MSAL_INSTANCE, useFactory: msalInstanceFactory },
     { provide: MSAL_GUARD_CONFIG, useFactory: msalGuardConfigFactory },
     { provide: MSAL_INTERCEPTOR_CONFIG, useFactory: msalInterceptorConfigFactory },

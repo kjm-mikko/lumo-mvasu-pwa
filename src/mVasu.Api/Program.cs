@@ -41,9 +41,41 @@ builder.Host.UseSerilog((context, services, configuration) =>
     }
 });
 
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+// Dev-only authentication bypass. When enabled, requests carrying an
+// X-Dev-User: <email> header are authenticated as that email without an
+// Azure AD JWT — used by the PWA's dev user picker (environment.devAuth)
+// to switch between mVasu users for PermissionPolicy testing without
+// re-logging into Microsoft. Gated at startup on Development env *and*
+// the explicit config flag; production never registers the scheme.
+var devHeaderAuthEnabled = builder.Environment.IsDevelopment()
+    && builder.Configuration.GetValue<bool>("Development:DevHeaderAuth:Enabled");
+
+const string CombinedAuthScheme = "Default";
+var defaultAuthScheme = devHeaderAuthEnabled
+    ? CombinedAuthScheme
+    : JwtBearerDefaults.AuthenticationScheme;
+
+var authBuilder = builder.Services.AddAuthentication(defaultAuthScheme);
+
+if (devHeaderAuthEnabled)
+{
+    // Per-request switch: presence of X-Dev-User → dev handler, otherwise
+    // standard JWT bearer. Both paths land on AccessAsUserPolicy, which
+    // checks the `scp` claim — the dev handler emits `access_as_user` to
+    // match.
+    authBuilder.AddPolicyScheme(CombinedAuthScheme, displayName: "Auto", options =>
+    {
+        options.ForwardDefaultSelector = context =>
+            context.Request.Headers.ContainsKey(DevHeaderAuthenticationDefaults.HeaderName)
+                ? DevHeaderAuthenticationDefaults.Scheme
+                : JwtBearerDefaults.AuthenticationScheme;
+    });
+    authBuilder.AddScheme<DevHeaderAuthenticationOptions, DevHeaderAuthenticationHandler>(
+        DevHeaderAuthenticationDefaults.Scheme,
+        options => options.Scope = builder.Configuration["AzureAd:Scopes"] ?? "access_as_user");
+}
+
+authBuilder.AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
 
 const string AccessAsUserPolicy = "AccessAsUser";
 builder.Services.AddAuthorization(options =>
@@ -113,6 +145,15 @@ if (app.Environment.IsDevelopment())
             "DEV IMPERSONATION ACTIVE: every authenticated request will resolve to {Email}. " +
             "Disable by clearing Development:ImpersonateEmail or unsetting the env var Development__ImpersonateEmail.",
             impersonate);
+    }
+
+    if (devHeaderAuthEnabled)
+    {
+        app.Logger.LogWarning(
+            "DEV HEADER AUTH ACTIVE: requests with header {Header}: <email> authenticate without an Azure AD JWT. " +
+            "Disable by setting Development:DevHeaderAuth:Enabled=false (or unsetting the env var " +
+            "Development__DevHeaderAuth__Enabled). Production registrations are gated by IsDevelopment().",
+            DevHeaderAuthenticationDefaults.HeaderName);
     }
 }
 
